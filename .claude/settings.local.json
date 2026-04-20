@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(npx tsx *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3000/health)",
+      "Bash(curl -s \"http://localhost:3000/api/dashboard?range=7\")",
+      "Bash(curl -s -o /dev/null -w \"Status: %{http_code}\\\\n\" http://localhost:3001)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //PID 2404 //F)",
+      "Bash(docker --version)",
+      "Bash(docker compose *)"
+    ]
+  }
+}

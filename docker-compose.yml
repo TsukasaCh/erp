@@ -1,0 +1,98 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: erp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-erp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erp_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-erp}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-erp} -d ${POSTGRES_DB:-erp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: erp-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-erp}:${POSTGRES_PASSWORD:-erp_secret}@postgres:5432/${POSTGRES_DB:-erp}?schema=public
+      SHOPEE_PARTNER_ID: ${SHOPEE_PARTNER_ID:-}
+      SHOPEE_PARTNER_KEY: ${SHOPEE_PARTNER_KEY:-}
+      SHOPEE_SHOP_ID: ${SHOPEE_SHOP_ID:-}
+      SHOPEE_ACCESS_TOKEN: ${SHOPEE_ACCESS_TOKEN:-}
+      SHOPEE_BASE_URL: ${SHOPEE_BASE_URL:-https://partner.shopeemobile.com}
+      TIKTOK_APP_KEY: ${TIKTOK_APP_KEY:-}
+      TIKTOK_APP_SECRET: ${TIKTOK_APP_SECRET:-}
+      TIKTOK_SHOP_ID: ${TIKTOK_SHOP_ID:-}
+      TIKTOK_ACCESS_TOKEN: ${TIKTOK_ACCESS_TOKEN:-}
+      TIKTOK_BASE_URL: ${TIKTOK_BASE_URL:-https://open-api.tiktokglobalshop.com}
+      OAUTH_REDIRECT_BASE: ${OAUTH_REDIRECT_BASE:-http://localhost:3000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: erp-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-erp}:${POSTGRES_PASSWORD:-erp_secret}@postgres:5432/${POSTGRES_DB:-erp}?schema=public
+      SHOPEE_PARTNER_ID: ${SHOPEE_PARTNER_ID:-}
+      SHOPEE_PARTNER_KEY: ${SHOPEE_PARTNER_KEY:-}
+      SHOPEE_SHOP_ID: ${SHOPEE_SHOP_ID:-}
+      SHOPEE_ACCESS_TOKEN: ${SHOPEE_ACCESS_TOKEN:-}
+      SHOPEE_BASE_URL: ${SHOPEE_BASE_URL:-https://partner.shopeemobile.com}
+      TIKTOK_APP_KEY: ${TIKTOK_APP_KEY:-}
+      TIKTOK_APP_SECRET: ${TIKTOK_APP_SECRET:-}
+      TIKTOK_SHOP_ID: ${TIKTOK_SHOP_ID:-}
+      TIKTOK_ACCESS_TOKEN: ${TIKTOK_ACCESS_TOKEN:-}
+      TIKTOK_BASE_URL: ${TIKTOK_BASE_URL:-https://open-api.tiktokglobalshop.com}
+      SYNC_INTERVAL_CRON: ${SYNC_INTERVAL_CRON:-*/5 * * * *}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    command: ["node", "dist/workers/orderSyncCron.js"]
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:3000}
+    container_name: erp-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

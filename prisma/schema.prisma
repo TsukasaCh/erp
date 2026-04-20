@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id          String        @id @default(uuid())
+  sku         String        @unique
+  name        String
+  stock       Int           @default(0)
+  price       Float
+  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime      @default(now())
+
+  platformSkus PlatformSku[]
+  orderItems   OrderItem[]
+
+  @@index([sku])
+}
+
+model PlatformSku {
+  id             String   @id @default(uuid())
+  productId      String
+  platform       String
+  externalSku    String
+  externalItemId String?
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, externalSku])
+  @@index([productId])
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  platform        String
+  externalOrderId String
+  status          String
+  buyerName       String?
+  totalAmount     Float
+  shippingStatus  String?
+  orderedAt       DateTime
+  syncedAt        DateTime    @default(now())
+  rawPayload      String?
+
+  items OrderItem[]
+
+  @@unique([platform, externalOrderId])
+  @@index([status, platform])
+  @@index([orderedAt])
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  productId String?
+  sku       String
+  quantity  Int
+  price     Float
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+}
+
+model ShopCredentials {
+  id           String    @id @default(uuid())
+  platform     String
+  shopId       String
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime  @default(now())
+
+  @@unique([platform, shopId])
+}
+
+model WebhookEvent {
+  id          Int      @id @default(autoincrement())
+  platform    String
+  eventType   String
+  externalId  String?
+  payload     String
+  processed   Boolean  @default(false)
+  receivedAt  DateTime @default(now())
+
+  @@index([platform, processed])
+  @@index([receivedAt])
+}
+
+model SyncLog {
+  id        Int      @id @default(autoincrement())
+  platform  String
+  type      String
+  status    String
+  message   String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
