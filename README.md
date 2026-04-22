@@ -150,6 +150,11 @@ docker compose up -d --build
 docker compose ps
 docker compose logs -f api       # tail log API
 docker compose logs -f worker    # tail log cron sync
+
+# 4. (opsional) seed data dummy — pakai versi COMPILED (di production tidak ada src/)
+docker compose exec api node dist/seed.js
+# atau setelah update:
+docker compose exec api npm run seed:prod
 ```
 
 Setelah up, akses:
@@ -169,8 +174,8 @@ docker compose down -v
 # Rebuild satu service tanpa cache
 docker compose build --no-cache api
 
-# Jalankan seed data (setelah postgres up)
-docker compose exec api npx tsx src/seed.ts
+# Jalankan seed data (production image hanya berisi dist/)
+docker compose exec api node dist/seed.js
 
 # Masuk ke shell container
 docker compose exec api sh

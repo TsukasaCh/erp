@@ -1,5 +1,5 @@
 import './globals.css';
-import { Nav } from '@/components/Nav';
+import { Sidebar } from '@/components/Nav';
 
 export const metadata = {
   title: 'ERP Marketplace',
@@ -10,8 +10,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="id">
       <body>
-        <Nav />
-        <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>
+        <Sidebar />
+        <main className="ml-60 min-h-screen px-8 py-8">{children}</main>
       </body>
     </html>
   );

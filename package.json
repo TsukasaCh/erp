@@ -9,6 +9,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "start:worker": "node dist/workers/orderSyncCron.js",
+    "seed": "tsx src/seed.ts",
+    "seed:prod": "node dist/seed.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio"
