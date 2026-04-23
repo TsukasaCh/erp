@@ -30,6 +30,12 @@ interface Props<Row extends SpreadsheetRow> {
   onRowTemplate: () => Row;
   /** max history stack size */
   maxUndo?: number;
+  /** if provided, render a "Selesai" button that calls this */
+  onClose?: () => void;
+  /** prepend one blank row on mount (for "+ Tambah" entry flow) */
+  autoAddRow?: boolean;
+  /** focus a specific row on mount (by id) */
+  focusRowId?: string;
 }
 
 type Snapshot<Row> = { rows: Row[]; selected: Set<string> };
@@ -44,6 +50,9 @@ export function SpreadsheetEditor<Row extends SpreadsheetRow>({
   onSave,
   onRowTemplate,
   maxUndo = 50,
+  onClose,
+  autoAddRow,
+  focusRowId,
 }: Props<Row>) {
   const normalize = useCallback(
     (rows: Row[]): Row[] =>
@@ -67,6 +76,27 @@ export function SpreadsheetEditor<Row extends SpreadsheetRow>({
     historyRef.current = [];
     redoRef.current = [];
   }, [initialRows, normalize]);
+
+  // optionally prepend a blank row on mount
+  const didAutoAddRef = useRef(false);
+  useEffect(() => {
+    if (autoAddRow && !didAutoAddRef.current) {
+      didAutoAddRef.current = true;
+      const base = onRowTemplate();
+      const newRow = { ...base, _localId: uid(), _new: true, _dirty: true } as Row;
+      setRows((r) => [newRow, ...r]);
+    }
+  }, [autoAddRow, onRowTemplate]);
+
+  // focus a specific row on mount (highlight it)
+  useEffect(() => {
+    if (focusRowId) {
+      setTimeout(() => {
+        const el = document.querySelector(`[data-row-id="${focusRowId}"]`);
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 100);
+    }
+  }, [focusRowId]);
 
   const pushHistory = useCallback(() => {
     historyRef.current.push({
@@ -251,6 +281,14 @@ export function SpreadsheetEditor<Row extends SpreadsheetRow>({
         >
           {saving ? 'Menyimpan…' : 'Simpan'}
         </button>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 border border-slate-300 rounded text-xs font-medium hover:bg-slate-50"
+          >
+            ✕ Selesai
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-auto border-x border-b border-slate-200 rounded-b-lg bg-white">
@@ -290,6 +328,7 @@ export function SpreadsheetEditor<Row extends SpreadsheetRow>({
               return (
                 <tr
                   key={localId}
+                  data-row-id={row.id ?? localId}
                   className={
                     'group ' +
                     (isSelected
@@ -298,6 +337,8 @@ export function SpreadsheetEditor<Row extends SpreadsheetRow>({
                       ? 'bg-emerald-50/40'
                       : row._dirty
                       ? 'bg-amber-50/50'
+                      : focusRowId && row.id === focusRowId
+                      ? 'bg-yellow-100'
                       : 'hover:bg-slate-50')
                   }
                 >
