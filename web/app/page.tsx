@@ -3,16 +3,20 @@ import useSWR from 'swr';
 import { useState } from 'react';
 import { fetcher, formatRupiah } from '@/lib/api';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 
 interface DashboardData {
   range_days: number;
   total_orders: number;
   gross_revenue: number;
-  by_platform: Array<{ platform: string; orders: number; revenue: number }>;
+  total_quantity: number;
+  total_products: number;
+  low_stock_count: number;
+  low_stock: Array<{ id: string; sku: string; name: string; stock: number }>;
   by_status: Array<{ status: string; orders: number }>;
-  daily: Array<{ day: string; platform: string; orders: number; revenue: number }>;
+  by_platform: Array<{ platform: string; orders: number; revenue: number }>;
+  daily: Array<{ day: string; orders: number; revenue: number }>;
 }
 
 export default function DashboardPage() {
@@ -24,10 +28,11 @@ export default function DashboardPage() {
   if (error) return <div className="text-red-600">Failed to load: {String(error)}</div>;
   if (isLoading || !data) return <div className="text-slate-500">Loading…</div>;
 
-  const chartData = pivotDaily(data.daily);
-  const shopeeRev = data.by_platform.find((p) => p.platform === 'shopee')?.revenue ?? 0;
-  const tiktokRev = data.by_platform.find((p) => p.platform === 'tiktok')?.revenue ?? 0;
   const toShip = data.by_status.find((s) => s.status === 'to_ship')?.orders ?? 0;
+  const chartData = data.daily.map((d) => ({
+    day: new Date(d.day).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }),
+    orders: d.orders,
+  }));
 
   return (
     <div className="space-y-6">
@@ -48,11 +53,11 @@ export default function DashboardPage() {
         <Card label="Total Orders" value={String(data.total_orders)} />
         <Card label="Gross Revenue" value={formatRupiah(data.gross_revenue)} />
         <Card label="Perlu Dikirim" value={String(toShip)} accent="orange" />
-        <Card label="Shopee / TikTok" value={`${formatRupiah(shopeeRev)} / ${formatRupiah(tiktokRev)}`} small />
+        <Card label="Total Produk" value={`${data.total_products} · ${data.low_stock_count} low`} small />
       </div>
 
       <section className="bg-white rounded-lg border border-slate-200 p-6">
-        <h2 className="font-semibold mb-4">Orders per Day by Platform</h2>
+        <h2 className="font-semibold mb-4">Orders per Hari</h2>
         <div style={{ width: '100%', height: 320 }}>
           <ResponsiveContainer>
             <BarChart data={chartData}>
@@ -60,25 +65,62 @@ export default function DashboardPage() {
               <XAxis dataKey="day" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
-              <Legend />
-              <Bar dataKey="shopee" stackId="a" fill="#ee4d2d" />
-              <Bar dataKey="tiktok" stackId="a" fill="#000000" />
+              <Bar dataKey="orders" fill="#26D9CB" />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </section>
 
-      <section className="bg-white rounded-lg border border-slate-200 p-6">
-        <h2 className="font-semibold mb-4">Status Breakdown</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {data.by_status.map((s) => (
-            <div key={s.status} className="p-4 bg-slate-50 rounded">
-              <div className="text-xs uppercase text-slate-500">{s.status.replace('_', ' ')}</div>
-              <div className="text-2xl font-bold">{s.orders}</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <section className="bg-white rounded-lg border border-slate-200 p-6">
+          <h2 className="font-semibold mb-4">Status Order</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {data.by_status.length === 0 && <div className="text-slate-400 col-span-2 text-sm">Belum ada data.</div>}
+            {data.by_status.map((s) => (
+              <div key={s.status} className="p-3 bg-slate-50 rounded">
+                <div className="text-xs uppercase text-slate-500">{s.status.replace('_', ' ')}</div>
+                <div className="text-2xl font-bold">{s.orders}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-white rounded-lg border border-slate-200 p-6">
+          <h2 className="font-semibold mb-4">Stok Menipis (≤10)</h2>
+          {data.low_stock.length === 0 ? (
+            <div className="text-slate-400 text-sm">Semua stok aman ✓</div>
+          ) : (
+            <div className="space-y-2">
+              {data.low_stock.map((p) => (
+                <div key={p.id} className="flex items-center justify-between py-1 border-b border-slate-100 last:border-0">
+                  <div>
+                    <div className="font-medium text-sm">{p.name}</div>
+                    <div className="text-xs text-slate-500 font-mono">{p.sku}</div>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${p.stock === 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {p.stock}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </section>
+          )}
+        </section>
+      </div>
+
+      {data.by_platform.length > 0 && (
+        <section className="bg-white rounded-lg border border-slate-200 p-6">
+          <h2 className="font-semibold mb-4">Per Platform</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {data.by_platform.map((p) => (
+              <div key={p.platform} className="p-3 bg-slate-50 rounded">
+                <div className="text-xs uppercase text-slate-500">{p.platform}</div>
+                <div className="text-lg font-bold">{p.orders} orders</div>
+                <div className="text-xs text-slate-600">{formatRupiah(p.revenue)}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -92,16 +134,4 @@ function Card({ label, value, accent, small }: { label: string; value: string; a
       </div>
     </div>
   );
-}
-
-function pivotDaily(rows: DashboardData['daily']) {
-  const map = new Map<string, { day: string; shopee: number; tiktok: number }>();
-  for (const r of rows) {
-    const day = new Date(r.day).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
-    if (!map.has(day)) map.set(day, { day, shopee: 0, tiktok: 0 });
-    const row = map.get(day)!;
-    if (r.platform === 'shopee') row.shopee = r.orders;
-    if (r.platform === 'tiktok') row.tiktok = r.orders;
-  }
-  return Array.from(map.values());
 }

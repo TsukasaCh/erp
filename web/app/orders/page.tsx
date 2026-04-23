@@ -1,161 +1,115 @@
 'use client';
 import useSWR from 'swr';
 import { useState } from 'react';
-import { fetcher, formatRupiah } from '@/lib/api';
-
-type Status = 'to_ship' | 'shipped' | 'completed' | 'cancelled' | 'all';
-type Platform = 'all' | 'shopee' | 'tiktok';
-
-interface OrderItem {
-  id: string;
-  sku: string;
-  quantity: number;
-  price: string;
-}
+import { fetcher, postJSON } from '@/lib/api';
+import { SpreadsheetEditor, type ColumnDef } from '@/components/SpreadsheetEditor';
 
 interface Order {
-  id: string;
-  platform: string;
-  externalOrderId: string;
+  id?: string;
+  orderNo?: string | null;
+  orderedAt?: string;
+  platform?: string | null;
+  buyer?: string | null;
+  sku?: string | null;
+  productName?: string | null;
+  quantity: number;
+  price: number;
+  total: number;
   status: string;
-  buyerName: string | null;
-  totalAmount: string;
-  shippingStatus: string | null;
-  orderedAt: string;
-  items: OrderItem[];
+  note?: string | null;
+  _localId?: string;
+  _dirty?: boolean;
+  _new?: boolean;
+  _deleted?: boolean;
+  [k: string]: unknown;
 }
 
 interface ListResponse { page: number; pageSize: number; total: number; items: Order[] }
 
-const TABS: { key: Status; label: string }[] = [
-  { key: 'to_ship', label: 'Perlu Dikirim' },
-  { key: 'shipped', label: 'Dikirim' },
-  { key: 'completed', label: 'Selesai' },
-  { key: 'cancelled', label: 'Cancel' },
-  { key: 'all', label: 'Semua' },
+const PLATFORMS = ['Shopee', 'TikTok', 'Tokopedia', 'Offline', 'WhatsApp', 'Instagram', 'Lainnya'];
+const STATUSES = ['to_ship', 'shipped', 'completed', 'cancelled'];
+
+const columns: ColumnDef<Order>[] = [
+  { key: 'orderNo', label: 'No. Order', type: 'text', width: 130 },
+  { key: 'orderedAt', label: 'Tanggal', type: 'datetime', width: 170 },
+  { key: 'platform', label: 'Platform', type: 'select', options: PLATFORMS, width: 120 },
+  { key: 'buyer', label: 'Pembeli', type: 'text', width: 160 },
+  { key: 'sku', label: 'SKU', type: 'text', width: 140 },
+  { key: 'productName', label: 'Produk', type: 'text', width: 220 },
+  { key: 'quantity', label: 'Qty', type: 'number', width: 70, align: 'right',
+    computed: (row) => {
+      // keep total in sync with qty*price
+      return row.quantity;
+    },
+  },
+  { key: 'price', label: 'Harga', type: 'number', width: 120, align: 'right',
+    format: (v) => v == null ? '' : `Rp ${Number(v).toLocaleString('id-ID')}` },
+  { key: 'total', label: 'Total', type: 'number', width: 140, align: 'right',
+    format: (v, row) => {
+      const t = Number(row.quantity ?? 0) * Number(row.price ?? 0);
+      return `Rp ${t.toLocaleString('id-ID')}`;
+    },
+    computed: (row) => Number(row.quantity ?? 0) * Number(row.price ?? 0),
+  },
+  { key: 'status', label: 'Status', type: 'select', options: STATUSES, width: 120 },
+  { key: 'note', label: 'Catatan', type: 'text', width: 200 },
 ];
 
 export default function OrdersPage() {
-  const [status, setStatus] = useState<Status>('to_ship');
-  const [platform, setPlatform] = useState<Platform>('all');
-  const [page, setPage] = useState(1);
-
-  const { data, error, isLoading } = useSWR<ListResponse>(
-    `/api/orders?status=${status}&platform=${platform}&page=${page}&pageSize=25`,
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const { data, error, isLoading, mutate } = useSWR<ListResponse>(
+    `/api/orders?status=${statusFilter}&pageSize=500`,
     fetcher,
   );
 
+  if (error) return <div className="text-red-600">Error: {String(error)}</div>;
+  if (isLoading || !data) return <div className="text-slate-500">Loading…</div>;
+
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Orders</h1>
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
+      <header className="mb-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Orders</h1>
+          <p className="text-sm text-slate-500">
+            Edit langsung seperti Excel. Double-click untuk edit. Total dihitung otomatis dari Qty × Harga.
+          </p>
+        </div>
         <select
-          value={platform}
-          onChange={(e) => { setPlatform(e.target.value as Platform); setPage(1); }}
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
           className="border rounded px-3 py-1.5 bg-white text-sm"
         >
-          <option value="all">All Platforms</option>
-          <option value="shopee">Shopee</option>
-          <option value="tiktok">TikTok</option>
+          <option value="all">Semua Status</option>
+          <option value="to_ship">Perlu Dikirim</option>
+          <option value="shipped">Dikirim</option>
+          <option value="completed">Selesai</option>
+          <option value="cancelled">Cancel</option>
         </select>
       </header>
 
-      <div className="flex gap-1 border-b border-slate-200">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => { setStatus(t.key); setPage(1); }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-              status === t.key
-                ? 'border-orange-500 text-orange-600'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="flex-1 min-h-0">
+        <SpreadsheetEditor<Order>
+          columns={columns}
+          initialRows={data.items}
+          onRowTemplate={() => ({
+            orderNo: '',
+            orderedAt: new Date().toISOString(),
+            platform: null,
+            buyer: '',
+            sku: '',
+            productName: '',
+            quantity: 1,
+            price: 0,
+            total: 0,
+            status: 'to_ship',
+            note: null,
+          })}
+          onSave={async ({ upserts, deletes }) => {
+            await postJSON('/api/orders/batch', { upserts, deletes });
+            await mutate();
+          }}
+        />
       </div>
-
-      {error && <div className="text-red-600">Error: {String(error)}</div>}
-      {isLoading && <div className="text-slate-500">Loading…</div>}
-
-      {data && (
-        <>
-          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Order ID</th>
-                  <th className="px-4 py-3 font-medium">Platform</th>
-                  <th className="px-4 py-3 font-medium">Buyer</th>
-                  <th className="px-4 py-3 font-medium">Items</th>
-                  <th className="px-4 py-3 font-medium text-right">Total</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Tanggal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.length === 0 && (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Tidak ada order.</td></tr>
-                )}
-                {data.items.map((o) => (
-                  <tr key={o.id} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="px-4 py-3 font-mono text-xs">{o.externalOrderId}</td>
-                    <td className="px-4 py-3">
-                      <PlatformBadge platform={o.platform} />
-                    </td>
-                    <td className="px-4 py-3">{o.buyerName ?? '-'}</td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {o.items.length} item · {o.items.reduce((s, i) => s + i.quantity, 0)} qty
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium">{formatRupiah(Number(o.totalAmount))}</td>
-                    <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
-                    <td className="px-4 py-3 text-slate-600">{new Date(o.orderedAt).toLocaleString('id-ID')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-500">Total: {data.total} orders</span>
-            <div className="flex gap-2">
-              <button
-                disabled={page === 1}
-                onClick={() => setPage((p) => p - 1)}
-                className="px-3 py-1 border rounded disabled:opacity-40"
-              >
-                Prev
-              </button>
-              <span className="px-3 py-1">Page {data.page}</span>
-              <button
-                disabled={data.page * data.pageSize >= data.total}
-                onClick={() => setPage((p) => p + 1)}
-                className="px-3 py-1 border rounded disabled:opacity-40"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
-}
-
-function PlatformBadge({ platform }: { platform: string }) {
-  const styles = platform === 'shopee'
-    ? 'bg-orange-100 text-orange-700'
-    : 'bg-slate-900 text-white';
-  return <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles}`}>{platform}</span>;
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    to_ship: 'bg-amber-100 text-amber-800',
-    shipped: 'bg-blue-100 text-blue-800',
-    completed: 'bg-emerald-100 text-emerald-800',
-    cancelled: 'bg-red-100 text-red-800',
-  };
-  return <span className={`px-2 py-0.5 rounded text-xs font-medium ${map[status] ?? 'bg-slate-100'}`}>{status}</span>;
 }

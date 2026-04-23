@@ -6,3 +6,6 @@ dist
 .DS_Store
 prisma/dev.db*
 postgres-data/
+
+# build artifacts
+web/tsconfig.tsbuildinfo
