@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 
 const links = [
@@ -12,9 +13,12 @@ export function Sidebar() {
   const pathname = usePathname();
   return (
     <aside className="fixed top-0 left-0 h-screen w-60 bg-white border-r border-slate-200 flex flex-col">
-      <div className="px-6 py-5 border-b border-slate-200">
-        <div className="font-bold text-lg leading-tight">ERP</div>
-        <div className="text-orange-500 font-semibold text-sm">Marketplace</div>
+      <div className="px-5 py-5 border-b border-slate-200 flex items-center gap-3">
+        <Image src="/logo.svg" alt="Alucurv" width={40} height={40} priority />
+        <div>
+          <div className="font-bold text-lg leading-tight tracking-tight">Alucurv</div>
+          <div className="text-[11px] text-slate-500 leading-tight">Marketplace ERP</div>
+        </div>
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1">
@@ -44,6 +48,7 @@ export function Sidebar() {
           Connected
         </div>
         <div className="mt-1">Shopee · TikTok</div>
+        <div className="mt-2 text-[10px] text-slate-300 italic">Kreasi alumunium, inovasi tanpa batas</div>
       </div>
     </aside>
   );

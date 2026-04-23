@@ -2,8 +2,8 @@ import './globals.css';
 import { Sidebar } from '@/components/Nav';
 
 export const metadata = {
-  title: 'ERP Marketplace',
-  description: 'TikTok Shop & Shopee unified ERP',
+  title: 'Alucurv — Marketplace ERP',
+  description: 'Alucurv ERP — Kreasi alumunium, inovasi tanpa batas. TikTok Shop & Shopee unified ERP.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
