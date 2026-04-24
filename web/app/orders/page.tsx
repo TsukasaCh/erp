@@ -1,7 +1,8 @@
 'use client';
 import useSWR from 'swr';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { fetcher, formatRupiah, postJSON } from '@/lib/api';
+import { platformColor, platformBadgeClass } from '@/lib/colors';
 import { SpreadsheetEditor, type ColumnDef } from '@/components/SpreadsheetEditor';
 
 interface Order {
@@ -37,7 +38,7 @@ const TABS: { key: string; label: string }[] = [
   { key: 'all', label: 'Semua' },
 ];
 
-const columns: ColumnDef<Order>[] = [
+const editorColumns: ColumnDef<Order>[] = [
   { key: 'orderNo', label: 'No. Order', type: 'text', width: 130 },
   { key: 'orderedAt', label: 'Tanggal', type: 'datetime', width: 170 },
   { key: 'platform', label: 'Platform', type: 'select', options: PLATFORMS, width: 120 },
@@ -62,15 +63,59 @@ type Mode =
   | { kind: 'view' }
   | { kind: 'edit'; focusId?: string; addNew?: boolean };
 
+type SortKey = 'orderNo' | 'orderedAt' | 'platform' | 'buyer' | 'productName' | 'quantity' | 'total' | 'status';
+type SortDir = 'asc' | 'desc';
+
 export default function OrdersPage() {
   const [mode, setMode] = useState<Mode>({ kind: 'view' });
   const [status, setStatus] = useState<string>('to_ship');
   const [platform, setPlatform] = useState<string>('all');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'orderedAt', dir: 'desc' });
 
   const { data, error, isLoading, mutate } = useSWR<ListResponse>(
-    `/api/orders?status=${status}&platform=${platform}&pageSize=500`,
+    `/api/orders?status=${status}&pageSize=500`,
     fetcher,
   );
+
+  // Platform counts (computed from current status filter)
+  const platformCounts = useMemo(() => {
+    if (!data) return new Map<string, number>();
+    const m = new Map<string, number>();
+    for (const o of data.items) {
+      const p = o.platform ?? '(none)';
+      m.set(p, (m.get(p) ?? 0) + 1);
+    }
+    return m;
+  }, [data]);
+
+  const filteredSorted = useMemo(() => {
+    if (!data) return [];
+    let rows = data.items;
+    if (platform !== 'all') rows = rows.filter((o) => (o.platform ?? '(none)') === platform);
+    if (search) {
+      const s = search.toLowerCase();
+      rows = rows.filter((o) =>
+        (o.orderNo ?? '').toLowerCase().includes(s) ||
+        (o.buyer ?? '').toLowerCase().includes(s) ||
+        (o.sku ?? '').toLowerCase().includes(s) ||
+        (o.productName ?? '').toLowerCase().includes(s),
+      );
+    }
+    const sorted = [...rows].sort((a, b) => {
+      const av = a[sort.key];
+      const bv = b[sort.key];
+      // null/undefined go to the end
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      let cmp: number;
+      if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
+      else cmp = String(av).localeCompare(String(bv), 'id-ID', { numeric: true });
+      return sort.dir === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [data, platform, search, sort]);
 
   if (error) return <div className="text-red-600">Error: {String(error)}</div>;
   if (isLoading || !data) return <div className="text-slate-500">Loading…</div>;
@@ -78,20 +123,18 @@ export default function OrdersPage() {
   if (mode.kind === 'edit') {
     return (
       <div className="flex flex-col h-[calc(100vh-4rem)]">
-        <header className="mb-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">
-              {mode.addNew ? 'Tambah Order' : 'Edit Orders'}
-            </h1>
-            <p className="text-sm text-slate-500">
-              Double-click sel untuk edit. Ctrl+S simpan · Ctrl+Z undo · Del hapus baris.
-            </p>
-          </div>
+        <header className="mb-4">
+          <h1 className="text-2xl font-bold">
+            {mode.addNew ? 'Tambah Order' : 'Edit Orders'}
+          </h1>
+          <p className="text-sm text-slate-500">
+            Double-click sel untuk edit. Ctrl+S simpan · Ctrl+Z undo · Del hapus baris.
+          </p>
         </header>
 
         <div className="flex-1 min-h-0">
           <SpreadsheetEditor<Order>
-            columns={columns}
+            columns={editorColumns}
             initialRows={data.items}
             autoAddRow={mode.addNew}
             focusRowId={mode.focusId}
@@ -119,19 +162,27 @@ export default function OrdersPage() {
     );
   }
 
+  const toggleSort = (key: SortKey) => {
+    setSort((prev) => prev.key === key
+      ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: 'asc' },
+    );
+  };
+
+  const totalFiltered = filteredSorted.length;
+  const totalRevenue = filteredSorted.reduce((s, o) => s + Number(o.total ?? 0), 0);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Orders</h1>
         <div className="flex items-center gap-2">
-          <select
-            value={platform}
-            onChange={(e) => setPlatform(e.target.value)}
-            className="border rounded px-3 py-1.5 bg-white text-sm"
-          >
-            <option value="all">All Platforms</option>
-            {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
+          <input
+            placeholder="Cari order / pembeli / SKU…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="border rounded px-3 py-1.5 bg-white text-sm w-60"
+          />
           <button
             onClick={() => setMode({ kind: 'edit' })}
             className="px-3 py-1.5 border border-slate-300 rounded text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5"
@@ -147,6 +198,7 @@ export default function OrdersPage() {
         </div>
       </header>
 
+      {/* Status tabs */}
       <div className="flex gap-1 border-b border-slate-200">
         {TABS.map((t) => (
           <button
@@ -163,30 +215,70 @@ export default function OrdersPage() {
         ))}
       </div>
 
+      {/* Platform filter chips */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs uppercase tracking-wide text-slate-500 mr-1">Filter Platform:</span>
+        <PlatformChip
+          label="Semua"
+          active={platform === 'all'}
+          onClick={() => setPlatform('all')}
+          count={data.items.length}
+        />
+        {PLATFORMS.map((p) => {
+          const count = platformCounts.get(p) ?? 0;
+          if (count === 0) return null;
+          return (
+            <PlatformChip
+              key={p}
+              label={p}
+              active={platform === p}
+              onClick={() => setPlatform(p)}
+              count={count}
+              color={platformColor(p)}
+            />
+          );
+        })}
+      </div>
+
+      {/* Summary strip */}
+      <div className="flex items-center gap-4 text-sm">
+        <span className="text-slate-600">
+          <span className="font-semibold text-slate-900">{totalFiltered}</span> order
+        </span>
+        <span className="text-slate-400">·</span>
+        <span className="text-slate-600">
+          Total: <span className="font-semibold text-slate-900">{formatRupiah(totalRevenue)}</span>
+        </span>
+      </div>
+
       <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left">
             <tr>
-              <th className="px-4 py-3 font-medium">Order ID</th>
-              <th className="px-4 py-3 font-medium">Platform</th>
-              <th className="px-4 py-3 font-medium">Pembeli</th>
-              <th className="px-4 py-3 font-medium">Produk</th>
-              <th className="px-4 py-3 font-medium text-right">Qty</th>
-              <th className="px-4 py-3 font-medium text-right">Total</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Tanggal</th>
+              <SortHeader label="Order ID" sortKey="orderNo" sort={sort} onSort={toggleSort} />
+              <SortHeader label="Platform" sortKey="platform" sort={sort} onSort={toggleSort} />
+              <SortHeader label="Pembeli" sortKey="buyer" sort={sort} onSort={toggleSort} />
+              <SortHeader label="Produk" sortKey="productName" sort={sort} onSort={toggleSort} />
+              <SortHeader label="Qty" sortKey="quantity" sort={sort} onSort={toggleSort} align="right" />
+              <SortHeader label="Total" sortKey="total" sort={sort} onSort={toggleSort} align="right" />
+              <SortHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+              <SortHeader label="Tanggal" sortKey="orderedAt" sort={sort} onSort={toggleSort} />
               <th className="px-4 py-3 w-10" />
             </tr>
           </thead>
           <tbody>
-            {data.items.length === 0 && (
-              <tr><td colSpan={9} className="px-4 py-12 text-center text-slate-400">Tidak ada order.</td></tr>
+            {filteredSorted.length === 0 && (
+              <tr><td colSpan={9} className="px-4 py-12 text-center text-slate-400">Tidak ada order yang cocok.</td></tr>
             )}
-            {data.items.map((o) => (
+            {filteredSorted.map((o) => (
               <tr key={o.id} className="border-t border-slate-100 hover:bg-slate-50 group">
                 <td className="px-4 py-3 font-mono text-xs">{o.orderNo ?? '-'}</td>
                 <td className="px-4 py-3">
-                  {o.platform ? <PlatformBadge platform={o.platform} /> : <span className="text-slate-400">-</span>}
+                  {o.platform ? (
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${platformBadgeClass(o.platform)}`}>
+                      {o.platform}
+                    </span>
+                  ) : <span className="text-slate-400">-</span>}
                 </td>
                 <td className="px-4 py-3">{o.buyer ?? '-'}</td>
                 <td className="px-4 py-3">
@@ -213,27 +305,55 @@ export default function OrdersPage() {
           </tbody>
         </table>
       </div>
-
-      <div className="text-xs text-slate-500">
-        Total: {data.items.length} order
-      </div>
     </div>
   );
 }
 
-function PlatformBadge({ platform }: { platform: string }) {
-  const map: Record<string, string> = {
-    Shopee: 'bg-orange-100 text-orange-700',
-    TikTok: 'bg-slate-900 text-white',
-    Tokopedia: 'bg-emerald-100 text-emerald-700',
-    Offline: 'bg-slate-100 text-slate-700',
-    WhatsApp: 'bg-green-100 text-green-700',
-    Instagram: 'bg-pink-100 text-pink-700',
-  };
+function SortHeader({ label, sortKey, sort, onSort, align }: {
+  label: string;
+  sortKey: SortKey;
+  sort: { key: SortKey; dir: SortDir };
+  onSort: (k: SortKey) => void;
+  align?: 'right';
+}) {
+  const isActive = sort.key === sortKey;
   return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${map[platform] ?? 'bg-slate-100 text-slate-700'}`}>
-      {platform}
-    </span>
+    <th
+      onClick={() => onSort(sortKey)}
+      className={`px-4 py-3 font-medium cursor-pointer select-none hover:bg-slate-100 ${align === 'right' ? 'text-right' : ''}`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {isActive && (
+          <span className="text-xs text-teal-600">
+            {sort.dir === 'asc' ? '▲' : '▼'}
+          </span>
+        )}
+        {!isActive && <span className="text-xs text-slate-300">↕</span>}
+      </span>
+    </th>
+  );
+}
+
+function PlatformChip({ label, active, onClick, count, color }: {
+  label: string; active: boolean; onClick: () => void; count: number; color?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+        active
+          ? 'bg-slate-900 text-white border-slate-900'
+          : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+      }`}
+    >
+      {color && (
+        <span className="w-2 h-2 rounded-full" style={{ background: color }} />
+      )}
+      <span>{label}</span>
+      <span className={active ? 'text-slate-300' : 'text-slate-400'}>·</span>
+      <span>{count}</span>
+    </button>
   );
 }
 

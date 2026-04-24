@@ -26,7 +26,7 @@ dashboardRouter.get('/', async (req, res) => {
     }),
     prisma.order.findMany({
       where: { orderedAt: { gte: since } },
-      select: { orderedAt: true, total: true, platform: true },
+      select: { orderedAt: true, total: true, platform: true, status: true },
     }),
     prisma.product.findMany({
       where: { stock: { lte: 10 } },
@@ -36,16 +36,21 @@ dashboardRouter.get('/', async (req, res) => {
     prisma.product.count(),
   ]);
 
-  // Bucket revenue by day (JS-side so it works on any DB)
-  const dailyMap = new Map<string, { day: string; orders: number; revenue: number }>();
+  // Bucket by day (JS-side so it works on any DB)
+  const dailyMap = new Map<string, { day: string; orders: number; revenue: number; byPlatform: Record<string, number> }>();
+  const platformSet = new Set<string>();
   for (const o of recentOrders) {
     const day = new Date(o.orderedAt).toISOString().slice(0, 10);
-    const cur = dailyMap.get(day) ?? { day, orders: 0, revenue: 0 };
+    const platform = o.platform ?? '(none)';
+    platformSet.add(platform);
+    const cur = dailyMap.get(day) ?? { day, orders: 0, revenue: 0, byPlatform: {} };
     cur.orders += 1;
     cur.revenue += Number(o.total);
+    cur.byPlatform[platform] = (cur.byPlatform[platform] ?? 0) + 1;
     dailyMap.set(day, cur);
   }
   const daily = Array.from(dailyMap.values()).sort((a, b) => a.day.localeCompare(b.day));
+  const platforms = Array.from(platformSet).sort();
 
   res.json({
     range_days: days,
@@ -62,5 +67,6 @@ dashboardRouter.get('/', async (req, res) => {
       revenue: Number(p._sum.total ?? 0),
     })),
     daily,
+    platforms,
   });
 });
