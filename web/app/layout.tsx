@@ -1,17 +1,21 @@
 import './globals.css';
 import { Sidebar } from '@/components/Nav';
+import { AuthGuard } from '@/components/AuthGuard';
+import { LayoutMain } from '@/components/LayoutMain';
 
 export const metadata = {
-  title: 'Alucurv — Marketplace ERP',
-  description: 'Alucurv ERP — Kreasi alumunium, inovasi tanpa batas. TikTok Shop & Shopee unified ERP.',
+  title: 'Alucurv — ERP',
+  description: 'Alucurv ERP — Kreasi alumunium, inovasi tanpa batas.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="id">
       <body>
-        <Sidebar />
-        <main className="ml-60 min-h-screen px-8 py-8">{children}</main>
+        <AuthGuard>
+          <Sidebar />
+          <LayoutMain>{children}</LayoutMain>
+        </AuthGuard>
       </body>
     </html>
   );

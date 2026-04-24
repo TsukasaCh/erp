@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db/client';
+import { requirePermission } from '../middleware/auth';
 
 export const productsRouter = Router();
 
@@ -19,14 +20,14 @@ const batchSchema = z.object({
   deletes: z.array(z.string()).default([]),
 });
 
-productsRouter.get('/', async (_req, res) => {
+productsRouter.get('/', requirePermission('products:view'), async (_req, res) => {
   const products = await prisma.product.findMany({
     orderBy: { updatedAt: 'desc' },
   });
   res.json(products);
 });
 
-productsRouter.post('/batch', async (req, res) => {
+productsRouter.post('/batch', requirePermission('products:write'), async (req, res) => {
   const parsed = batchSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { upserts, deletes } = parsed.data;
@@ -63,7 +64,7 @@ productsRouter.post('/batch', async (req, res) => {
   res.json({ saved, deleted: deletedCount });
 });
 
-productsRouter.post('/', async (req, res) => {
+productsRouter.post('/', requirePermission('products:write'), async (req, res) => {
   const parsed = productInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { id: _id, ...data } = parsed.data;
@@ -75,7 +76,7 @@ productsRouter.post('/', async (req, res) => {
   res.json(product);
 });
 
-productsRouter.delete('/:id', async (req, res) => {
-  await prisma.product.delete({ where: { id: req.params.id } });
+productsRouter.delete('/:id', requirePermission('products:write'), async (req, res) => {
+  await prisma.product.delete({ where: { id: String(req.params.id) } });
   res.json({ ok: true });
 });

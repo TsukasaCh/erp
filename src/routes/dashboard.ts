@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { prisma } from '../db/client';
+import { requirePermission } from '../middleware/auth';
 
 export const dashboardRouter = Router();
 
-dashboardRouter.get('/', async (req, res) => {
+dashboardRouter.get('/', requirePermission('dashboard:view'), async (req, res) => {
   const days = Math.min(Number(req.query.range ?? 7), 90);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 

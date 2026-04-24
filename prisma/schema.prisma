@@ -8,6 +8,33 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id            String   @id @default(uuid())
+  username      String   @unique
+  passwordHash  String
+  fullName      String?
+  isSuperAdmin  Boolean  @default(false)
+  active        Boolean  @default(true)
+  roleId        String?
+  role          Role?    @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([username])
+}
+
+model Role {
+  id          String @id @default(uuid())
+  name        String @unique
+  description String?
+  // permissions stored as JSON-encoded string array for cross-DB compat
+  permissions String @default("[]")
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model Product {
   id        String   @id @default(uuid())
   sku       String   @unique

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db/client';
+import { requirePermission } from '../middleware/auth';
 
 export const ordersRouter = Router();
 
@@ -31,7 +32,7 @@ const querySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(500).default(100),
 });
 
-ordersRouter.get('/', async (req, res) => {
+ordersRouter.get('/', requirePermission('orders:view'), async (req, res) => {
   const parsed = querySchema.safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { status, platform, page, pageSize } = parsed.data;
@@ -53,7 +54,7 @@ ordersRouter.get('/', async (req, res) => {
   res.json({ page, pageSize, total, items });
 });
 
-ordersRouter.post('/batch', async (req, res) => {
+ordersRouter.post('/batch', requirePermission('orders:write'), async (req, res) => {
   const parsed = batchSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { upserts, deletes } = parsed.data;
@@ -88,7 +89,7 @@ ordersRouter.post('/batch', async (req, res) => {
   res.json({ saved, deleted: deletedCount });
 });
 
-ordersRouter.delete('/:id', async (req, res) => {
-  await prisma.order.delete({ where: { id: req.params.id } });
+ordersRouter.delete('/:id', requirePermission('orders:write'), async (req, res) => {
+  await prisma.order.delete({ where: { id: String(req.params.id) } });
   res.json({ ok: true });
 });

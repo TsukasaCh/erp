@@ -1,29 +1,107 @@
 import { prisma } from './db/client';
+import { hashPassword } from './services/auth';
 
 const PRODUCTS = [
   { sku: 'ALU-SLIDE-3M', name: 'Aluminium Sliding Door 3m', category: 'Pintu', stock: 25, price: 2500000 },
   { sku: 'ALU-SLIDE-2M', name: 'Aluminium Sliding Door 2m', category: 'Pintu', stock: 18, price: 1800000 },
-  { sku: 'ALU-WIN-120', name: 'Aluminium Window 120cm', category: 'Jendela', stock: 40, price: 950000 },
-  { sku: 'ALU-WIN-90', name: 'Aluminium Window 90cm', category: 'Jendela', stock: 32, price: 750000 },
-  { sku: 'ALU-ARC-150', name: 'Kusen Lengkung 150cm', category: 'Kusen', stock: 8, price: 1400000 },
-  { sku: 'HNDL-SET-SLV', name: 'Handle Set Silver', category: 'Aksesoris', stock: 120, price: 85000 },
-  { sku: 'ROLR-4INC', name: 'Roller Bearing 4 inch', category: 'Aksesoris', stock: 6, price: 45000 },
-  { sku: 'SEAL-RBR-5M', name: 'Karet Seal 5m', category: 'Aksesoris', stock: 55, price: 75000 },
+  { sku: 'ALU-WIN-120',  name: 'Aluminium Window 120cm',    category: 'Jendela', stock: 40, price: 950000 },
+  { sku: 'ALU-WIN-90',   name: 'Aluminium Window 90cm',     category: 'Jendela', stock: 32, price: 750000 },
+  { sku: 'ALU-ARC-150',  name: 'Kusen Lengkung 150cm',      category: 'Kusen',   stock: 8,  price: 1400000 },
+  { sku: 'HNDL-SET-SLV', name: 'Handle Set Silver',          category: 'Aksesoris', stock: 120, price: 85000 },
+  { sku: 'ROLR-4INC',    name: 'Roller Bearing 4 inch',      category: 'Aksesoris', stock: 6,   price: 45000 },
+  { sku: 'SEAL-RBR-5M',  name: 'Karet Seal 5m',              category: 'Aksesoris', stock: 55,  price: 75000 },
 ];
 
 const BUYERS = ['Pak Andi', 'Bu Dewi', 'Toko Jaya', 'CV Maju', 'Bu Sari', 'Pak Budi', 'Toko Sinar', 'Pak Joko'];
 const PLATFORMS = ['Shopee', 'TikTok', 'Tokopedia', 'Offline', 'WhatsApp'];
 const STATUSES = ['to_ship', 'to_ship', 'shipped', 'completed', 'completed', 'cancelled'];
 
+// Default roles
+const ROLES = [
+  {
+    name: 'Administrator',
+    description: 'Akses penuh termasuk kelola user',
+    permissions: [
+      'dashboard:view',
+      'orders:view', 'orders:write',
+      'products:view', 'products:write',
+      'users:manage',
+    ],
+  },
+  {
+    name: 'Operator',
+    description: 'Edit orders & inventory, tanpa IAM',
+    permissions: [
+      'dashboard:view',
+      'orders:view', 'orders:write',
+      'products:view', 'products:write',
+    ],
+  },
+  {
+    name: 'Viewer',
+    description: 'Hanya lihat, tidak bisa edit',
+    permissions: [
+      'dashboard:view',
+      'orders:view',
+      'products:view',
+    ],
+  },
+];
+
 function rand<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
 function randInt(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
-async function main() {
-  console.log('Seeding Alucurv ERP...');
+async function ensureRolesAndAdmin() {
+  for (const r of ROLES) {
+    await prisma.role.upsert({
+      where: { name: r.name },
+      create: {
+        name: r.name,
+        description: r.description,
+        permissions: JSON.stringify(r.permissions),
+      },
+      update: {
+        description: r.description,
+        permissions: JSON.stringify(r.permissions),
+      },
+    });
+  }
+  console.log(`  ${ROLES.length} roles ready`);
 
-  await prisma.order.deleteMany();
-  await prisma.product.deleteMany();
+  const adminRole = await prisma.role.findUnique({ where: { name: 'Administrator' } });
+  const existing = await prisma.user.findUnique({ where: { username: 'admin' } });
+  if (existing) {
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: {
+        passwordHash: await hashPassword('Tanggor25@'),
+        isSuperAdmin: true,
+        active: true,
+        roleId: adminRole?.id ?? null,
+      },
+    });
+    console.log('  admin user reset (password: Tanggor25@)');
+  } else {
+    await prisma.user.create({
+      data: {
+        username: 'admin',
+        passwordHash: await hashPassword('Tanggor25@'),
+        fullName: 'Administrator',
+        isSuperAdmin: true,
+        active: true,
+        roleId: adminRole?.id ?? null,
+      },
+    });
+    console.log('  admin user created (username: admin, password: Tanggor25@)');
+  }
+}
 
+async function seedDemoData() {
+  const existingProducts = await prisma.product.count();
+  if (existingProducts > 0) {
+    console.log('  products already exist, skipping product/order seed');
+    return;
+  }
   await prisma.product.createMany({ data: PRODUCTS });
   console.log(`  ${PRODUCTS.length} products`);
 
@@ -53,6 +131,12 @@ async function main() {
     }
   }
   console.log(`  ${orderCount} orders across 14 days`);
+}
+
+async function main() {
+  console.log('Seeding Alucurv ERP...');
+  await ensureRolesAndAdmin();
+  await seedDemoData();
   console.log('Seed done.');
   await prisma.$disconnect();
 }
