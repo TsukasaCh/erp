@@ -88,6 +88,16 @@ function UsersTab() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
 
+  const me = getUser();
+  const actorIsSuper = !!me?.isSuperAdmin;
+  const adminRoleIds = useMemo(
+    () => new Set((roles ?? []).filter((r) => r.permissions.includes('users:manage')).map((r) => r.id)),
+    [roles],
+  );
+  const isTargetAdminLevel = (u: User) =>
+    u.isSuperAdmin || (u.role ? adminRoleIds.has(u.role.id) : false);
+  const canEdit = (u: User) => actorIsSuper || !isTargetAdminLevel(u);
+
   return (
     <section className="space-y-4">
       <div className="flex justify-end">
@@ -150,27 +160,35 @@ function UsersTab() {
                   {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('id-ID') : '—'}
                 </td>
                 <td className="px-4 py-3 text-right space-x-2">
-                  <button
-                    onClick={() => setEditing(u)}
-                    className="text-xs text-teal-700 hover:underline"
-                  >
-                    Edit
-                  </button>
-                  {!u.isSuperAdmin && (
-                    <button
-                      onClick={async () => {
-                        if (!confirm(`Hapus user "${u.username}"?`)) return;
-                        try {
-                          await deleteRequest(`/api/users/${u.id}`);
-                          mutate();
-                        } catch (e) {
-                          alert(`Gagal: ${(e as Error).message}`);
-                        }
-                      }}
-                      className="text-xs text-red-600 hover:underline"
-                    >
-                      Hapus
-                    </button>
+                  {canEdit(u) ? (
+                    <>
+                      <button
+                        onClick={() => setEditing(u)}
+                        className="text-xs text-teal-700 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      {!u.isSuperAdmin && (
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Hapus user "${u.username}"?`)) return;
+                            try {
+                              await deleteRequest(`/api/users/${u.id}`);
+                              mutate();
+                            } catch (e) {
+                              alert(`Gagal: ${(e as Error).message}`);
+                            }
+                          }}
+                          className="text-xs text-red-600 hover:underline"
+                        >
+                          Hapus
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-xs text-slate-300" title="Hanya Super Admin yang bisa mengubah user admin lain.">
+                      Terkunci
+                    </span>
                   )}
                 </td>
               </tr>
@@ -182,6 +200,7 @@ function UsersTab() {
       {adding && (
         <UserFormModal
           roles={roles ?? []}
+          actorIsSuper={actorIsSuper}
           onClose={() => setAdding(false)}
           onSaved={() => { setAdding(false); mutate(); }}
         />
@@ -190,6 +209,7 @@ function UsersTab() {
         <UserFormModal
           user={editing}
           roles={roles ?? []}
+          actorIsSuper={actorIsSuper}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); mutate(); }}
         />
@@ -199,10 +219,11 @@ function UsersTab() {
 }
 
 function UserFormModal({
-  user, roles, onClose, onSaved,
+  user, roles, actorIsSuper, onClose, onSaved,
 }: {
   user?: User;
   roles: Role[];
+  actorIsSuper: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -214,6 +235,11 @@ function UserFormModal({
   const [active, setActive] = useState<boolean>(user?.active ?? true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Non-super admin may not assign admin-level roles
+  const assignableRoles = actorIsSuper
+    ? roles
+    : roles.filter((r) => !r.permissions.includes('users:manage'));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -284,10 +310,15 @@ function UserFormModal({
             className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white"
           >
             <option value="">— Tidak ada role —</option>
-            {roles.map((r) => (
+            {assignableRoles.map((r) => (
               <option key={r.id} value={r.id}>{r.name}</option>
             ))}
           </select>
+          {!actorIsSuper && (
+            <div className="text-[11px] text-slate-400 mt-1">
+              Hanya Super Admin yang bisa memberi role dengan izin <code>users:manage</code>.
+            </div>
+          )}
         </Field>
         {isEdit && !user!.isSuperAdmin && (
           <label className="flex items-center gap-2 text-sm">
@@ -335,6 +366,11 @@ function RolesTab() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Role | null>(null);
 
+  const me = getUser();
+  const actorIsSuper = !!me?.isSuperAdmin;
+  const isAdminLevel = (r: Role) => r.permissions.includes('users:manage');
+  const canEdit = (r: Role) => actorIsSuper || !isAdminLevel(r);
+
   return (
     <section className="space-y-4">
       <div className="flex justify-end">
@@ -363,26 +399,34 @@ function RolesTab() {
                 </div>
               </div>
               <div className="flex gap-2 shrink-0">
-                <button
-                  onClick={() => setEditing(r)}
-                  className="text-xs text-teal-700 hover:underline"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!confirm(`Hapus role "${r.name}"?`)) return;
-                    try {
-                      await deleteRequest(`/api/roles/${r.id}`);
-                      mutate();
-                    } catch (e) {
-                      alert(`Gagal: ${(e as Error).message}`);
-                    }
-                  }}
-                  className="text-xs text-red-600 hover:underline"
-                >
-                  Hapus
-                </button>
+                {canEdit(r) ? (
+                  <>
+                    <button
+                      onClick={() => setEditing(r)}
+                      className="text-xs text-teal-700 hover:underline"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Hapus role "${r.name}"?`)) return;
+                        try {
+                          await deleteRequest(`/api/roles/${r.id}`);
+                          mutate();
+                        } catch (e) {
+                          alert(`Gagal: ${(e as Error).message}`);
+                        }
+                      }}
+                      className="text-xs text-red-600 hover:underline"
+                    >
+                      Hapus
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-[11px] text-slate-300" title="Hanya Super Admin yang bisa mengubah role admin.">
+                    Terkunci
+                  </span>
+                )}
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
@@ -406,6 +450,7 @@ function RolesTab() {
       {adding && (
         <RoleFormModal
           perms={perms ?? []}
+          actorIsSuper={actorIsSuper}
           onClose={() => setAdding(false)}
           onSaved={() => { setAdding(false); mutate(); }}
         />
@@ -414,6 +459,7 @@ function RolesTab() {
         <RoleFormModal
           role={editing}
           perms={perms ?? []}
+          actorIsSuper={actorIsSuper}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); mutate(); }}
         />
@@ -423,10 +469,11 @@ function RolesTab() {
 }
 
 function RoleFormModal({
-  role, perms, onClose, onSaved,
+  role, perms, actorIsSuper, onClose, onSaved,
 }: {
   role?: Role;
   perms: PermissionDef[];
+  actorIsSuper: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -497,18 +544,24 @@ function RoleFormModal({
             )}
             {perms.map((p) => {
               const checked = selected.has(p.code);
+              const locked = !actorIsSuper && p.code === 'users:manage';
               return (
                 <label
                   key={p.code}
-                  className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50"
+                  className={`flex items-center gap-3 px-3 py-2 ${locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-slate-50'}`}
+                  title={locked ? 'Hanya Super Admin yang bisa memberikan izin ini.' : undefined}
                 >
                   <input
                     type="checkbox"
                     checked={checked}
-                    onChange={() => toggle(p.code)}
+                    disabled={locked}
+                    onChange={() => !locked && toggle(p.code)}
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm text-slate-800">{p.label}</div>
+                    <div className="text-sm text-slate-800">
+                      {p.label}
+                      {locked && <span className="ml-2 text-[10px] text-slate-400">(Super Admin only)</span>}
+                    </div>
                     <div className="text-[11px] text-slate-400 font-mono">{p.code}</div>
                   </div>
                 </label>

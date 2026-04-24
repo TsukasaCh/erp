@@ -17,10 +17,18 @@ export const ALL_PERMISSIONS = [
 
 rolesRouter.use(requireAuth, requirePermission('users:manage'));
 
+function parsePerms(raw: string): string[] {
+  try { return JSON.parse(raw) as string[]; } catch { return []; }
+}
+
 function serialize(r: { id: string; name: string; description: string | null; permissions: string; createdAt: Date }) {
-  let perms: string[] = [];
-  try { perms = JSON.parse(r.permissions); } catch {}
-  return { id: r.id, name: r.name, description: r.description, permissions: perms, createdAt: r.createdAt };
+  return {
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    permissions: parsePerms(r.permissions),
+    createdAt: r.createdAt,
+  };
 }
 
 rolesRouter.get('/', async (_req, res) => {
@@ -49,6 +57,12 @@ const roleSchema = z.object({
 rolesRouter.post('/', async (req: AuthedRequest, res: Response) => {
   const parsed = roleSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  // Only super admin may create an admin-level role (one that grants users:manage)
+  if (!req.auth?.isSuperAdmin && parsed.data.permissions.includes('users:manage')) {
+    return res.status(403).json({ error: 'cannot_grant_users_manage' });
+  }
+
   const existing = await prisma.role.findUnique({ where: { name: parsed.data.name } });
   if (existing) return res.status(409).json({ error: 'name_taken' });
   const created = await prisma.role.create({
@@ -65,6 +79,23 @@ rolesRouter.patch('/:id', async (req: AuthedRequest, res: Response) => {
   const parsed = roleSchema.partial().safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const id = String(req.params.id);
+  const existing = await prisma.role.findUnique({ where: { id } });
+  if (!existing) return res.status(404).json({ error: 'not_found' });
+
+  const actorIsSuper = !!req.auth?.isSuperAdmin;
+  const currentPerms = parsePerms(existing.permissions);
+  const wasAdminLevel = currentPerms.includes('users:manage');
+
+  // Non-super admin may not touch an admin-level role at all
+  if (!actorIsSuper && wasAdminLevel) {
+    return res.status(403).json({ error: 'cannot_edit_admin_role' });
+  }
+
+  // Non-super admin may not escalate a role to admin-level
+  if (!actorIsSuper && parsed.data.permissions?.includes('users:manage')) {
+    return res.status(403).json({ error: 'cannot_grant_users_manage' });
+  }
+
   const data: Record<string, unknown> = {};
   if (parsed.data.name !== undefined) data.name = parsed.data.name;
   if (parsed.data.description !== undefined) data.description = parsed.data.description;
@@ -77,6 +108,13 @@ rolesRouter.delete('/:id', async (req: AuthedRequest, res: Response) => {
   const id = String(req.params.id);
   const role = await prisma.role.findUnique({ where: { id }, include: { users: true } });
   if (!role) return res.status(404).json({ error: 'not_found' });
+
+  // Non-super admin may not delete an admin-level role
+  const isAdminLevel = parsePerms(role.permissions).includes('users:manage');
+  if (!req.auth?.isSuperAdmin && isAdminLevel) {
+    return res.status(403).json({ error: 'cannot_delete_admin_role' });
+  }
+
   if (role.users.length > 0) {
     return res.status(400).json({ error: 'role_in_use', users: role.users.length });
   }
