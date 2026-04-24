@@ -7,12 +7,19 @@ export const rolesRouter = Router();
 
 // Full list of permission codes known to the app. The IAM UI reads this list.
 export const ALL_PERMISSIONS = [
-  { code: 'dashboard:view', label: 'Lihat Dashboard' },
-  { code: 'orders:view',    label: 'Lihat Orders' },
-  { code: 'orders:write',   label: 'Edit / Hapus Orders' },
-  { code: 'products:view',  label: 'Lihat Inventory' },
-  { code: 'products:write', label: 'Edit / Hapus Inventory' },
-  { code: 'users:manage',   label: 'Kelola User & Role (IAM)' },
+  { code: 'dashboard:view',  label: 'Lihat Dashboard' },
+  { code: 'orders:view',     label: 'Lihat Orders Penjualan' },
+  { code: 'orders:write',    label: 'Edit / Hapus Orders Penjualan' },
+  { code: 'purchases:view',  label: 'Lihat Pembelian / PO' },
+  { code: 'purchases:write', label: 'Edit / Hapus Pembelian / PO' },
+  { code: 'products:view',   label: 'Lihat Inventory (Produk Jadi)' },
+  { code: 'products:write',  label: 'Edit / Hapus Inventory' },
+  { code: 'materials:view',  label: 'Lihat Master Bahan Baku' },
+  { code: 'materials:write', label: 'Edit / Hapus Master Bahan Baku' },
+  { code: 'production:view', label: 'Lihat Kalender Produksi' },
+  { code: 'production:write',label: 'Edit / Hapus Kalender Produksi' },
+  { code: 'hpp:view',        label: 'Akses Kalkulator HPP' },
+  { code: 'users:manage',    label: 'Kelola User & Role (IAM)' },
 ];
 
 rolesRouter.use(requireAuth, requirePermission('users:manage'));

@@ -70,3 +70,60 @@ model Order {
   @@index([status])
   @@index([sku])
 }
+
+// Master data bahan baku (aluminium, kaca, handle, dst.)
+model Material {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  category  String?
+  unit      String   @default("pcs") // kg, m, batang, pcs, lembar, etc.
+  stock     Float    @default(0)
+  price     Float    @default(0)     // harga beli per unit
+  supplier  String?
+  note      String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@index([code])
+  @@index([category])
+}
+
+// Pembelian bahan baku / Purchase Order
+model PurchaseOrder {
+  id            String   @id @default(uuid())
+  poNo          String?
+  orderedAt     DateTime @default(now())
+  supplier      String?
+  materialCode  String?
+  materialName  String?
+  quantity      Float    @default(1)
+  unit          String?
+  price         Float    @default(0)
+  total         Float    @default(0)
+  status        String   @default("pending") // pending, received, cancelled
+  expectedAt    DateTime?
+  note          String?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  @@index([orderedAt])
+  @@index([status])
+}
+
+// Jadwal produksi
+model ProductionSchedule {
+  id           String   @id @default(uuid())
+  scheduledAt  DateTime
+  productSku   String?
+  productName  String
+  quantity     Int      @default(1)
+  status       String   @default("planned") // planned, in_progress, done, cancelled
+  assignedTo   String?
+  note         String?
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  @@index([scheduledAt])
+  @@index([status])
+}

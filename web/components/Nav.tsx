@@ -2,42 +2,96 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { clearAuth, getUser, hasPermission, type AuthUser } from '@/lib/auth';
 
-interface NavLink {
+type IconFn = (p: { className?: string }) => React.ReactElement;
+
+interface LeafLink {
+  kind: 'link';
   href: string;
   label: string;
-  icon: (p: { className?: string }) => React.ReactElement;
+  icon?: IconFn;
   permission?: string;
   superAdminOnly?: boolean;
 }
 
-const ALL_LINKS: NavLink[] = [
-  { href: '/', label: 'Dashboard', icon: IconDashboard, permission: 'dashboard:view' },
-  { href: '/orders', label: 'Orders', icon: IconOrders, permission: 'orders:view' },
-  { href: '/products', label: 'Inventory', icon: IconProducts, permission: 'products:view' },
-  { href: '/users', label: 'Users & Roles', icon: IconUsers, permission: 'users:manage' },
+interface GroupLink {
+  kind: 'group';
+  id: string;
+  label: string;
+  icon: IconFn;
+  children: LeafLink[];
+  // any permission among children's permissions grants visibility
+}
+
+type NavItem = LeafLink | GroupLink;
+
+const NAV: NavItem[] = [
+  { kind: 'link', href: '/', label: 'Dashboard', icon: IconDashboard, permission: 'dashboard:view' },
+  {
+    kind: 'group',
+    id: 'orders',
+    label: 'Orders',
+    icon: IconOrders,
+    children: [
+      { kind: 'link', href: '/orders', label: 'Penjualan', permission: 'orders:view' },
+      { kind: 'link', href: '/purchase-orders', label: 'Pembelian PO', permission: 'purchases:view' },
+    ],
+  },
+  { kind: 'link', href: '/production', label: 'Kalender Produksi', icon: IconCalendar, permission: 'production:view' },
+  { kind: 'link', href: '/hpp', label: 'Kalkulator HPP', icon: IconCalc, permission: 'hpp:view' },
+  { kind: 'link', href: '/products', label: 'Inventory', icon: IconProducts, permission: 'products:view' },
+  { kind: 'link', href: '/materials', label: 'Master Data Bahan', icon: IconBox, permission: 'materials:view' },
+  { kind: 'link', href: '/users', label: 'Users & Roles', icon: IconUsers, permission: 'users:manage' },
 ];
+
+function visibleFor(user: AuthUser | null, perm?: string, superAdminOnly?: boolean): boolean {
+  if (!user) return false;
+  if (user.isSuperAdmin) return true;
+  if (superAdminOnly) return false;
+  if (!perm) return true;
+  return hasPermission(perm);
+}
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setUser(getUser());
   }, [pathname]);
 
+  // Auto-open a group whose child matches the current route
+  useEffect(() => {
+    const next: Record<string, boolean> = { ...openGroups };
+    let changed = false;
+    for (const item of NAV) {
+      if (item.kind === 'group') {
+        const active = item.children.some((c) => pathname === c.href);
+        if (active && !next[item.id]) { next[item.id] = true; changed = true; }
+      }
+    }
+    if (changed) setOpenGroups(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
   if (pathname === '/login') return null;
 
-  const visibleLinks = ALL_LINKS.filter((l) => {
-    if (!user) return false;
-    if (user.isSuperAdmin) return true;
-    if (l.superAdminOnly) return false;
-    if (!l.permission) return true;
-    return hasPermission(l.permission);
-  });
+  const items = useMemo(() => {
+    return NAV.map((item) => {
+      if (item.kind === 'link') {
+        return visibleFor(user, item.permission, item.superAdminOnly) ? item : null;
+      }
+      const visibleChildren = item.children.filter((c) =>
+        visibleFor(user, c.permission, c.superAdminOnly),
+      );
+      if (visibleChildren.length === 0) return null;
+      return { ...item, children: visibleChildren };
+    }).filter(Boolean) as NavItem[];
+  }, [user]);
 
   const roleLabel = user?.isSuperAdmin ? 'Super Admin' : user?.role?.name ?? 'No role';
   const displayName = user?.fullName || user?.username || '—';
@@ -59,22 +113,70 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {visibleLinks.map((l) => {
-          const active = pathname === l.href;
-          const Icon = l.icon;
+        {items.map((item) => {
+          if (item.kind === 'link') {
+            const active = pathname === item.href;
+            const Icon = item.icon ?? IconDot;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${
+                  active
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span>{item.label}</span>
+              </Link>
+            );
+          }
+
+          const Icon = item.icon;
+          const childActive = item.children.some((c) => pathname === c.href);
+          const isOpen = openGroups[item.id] ?? childActive;
+
           return (
-            <Link
-              key={l.href}
-              href={l.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${
-                active
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              <span>{l.label}</span>
-            </Link>
+            <div key={item.id}>
+              <button
+                type="button"
+                onClick={() => setOpenGroups({ ...openGroups, [item.id]: !isOpen })}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${
+                  childActive
+                    ? 'text-slate-900'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="flex-1 text-left">{item.label}</span>
+                <IconChevron
+                  className={`w-3.5 h-3.5 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                />
+              </button>
+
+              {isOpen && (
+                <div className="mt-1 ml-3 pl-3 border-l border-slate-200 space-y-1">
+                  {item.children.map((c) => {
+                    const active = pathname === c.href;
+                    return (
+                      <Link
+                        key={c.href}
+                        href={c.href}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-colors ${
+                          active
+                            ? 'bg-slate-900 text-white font-medium'
+                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                        }`}
+                      >
+                        <span className="w-1 h-1 rounded-full bg-current opacity-60 shrink-0" />
+                        <span>{c.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
@@ -140,6 +242,59 @@ function IconUsers({ className = '' }: { className?: string }) {
       <circle cx="9" cy="7" r="4" />
       <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function IconCalendar({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function IconCalc({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="2" width="16" height="20" rx="2" />
+      <line x1="8" y1="6" x2="16" y2="6" />
+      <line x1="8" y1="10" x2="8" y2="10" />
+      <line x1="12" y1="10" x2="12" y2="10" />
+      <line x1="16" y1="10" x2="16" y2="10" />
+      <line x1="8" y1="14" x2="8" y2="14" />
+      <line x1="12" y1="14" x2="12" y2="14" />
+      <line x1="16" y1="14" x2="16" y2="14" />
+      <line x1="8" y1="18" x2="16" y2="18" />
+    </svg>
+  );
+}
+
+function IconBox({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 8 12 3 3 8l9 5 9-5Z" />
+      <path d="M3 8v8l9 5 9-5V8" />
+      <line x1="12" y1="13" x2="12" y2="21" />
+    </svg>
+  );
+}
+
+function IconDot({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function IconChevron({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6" />
     </svg>
   );
 }

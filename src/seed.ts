@@ -24,17 +24,25 @@ const ROLES = [
     permissions: [
       'dashboard:view',
       'orders:view', 'orders:write',
+      'purchases:view', 'purchases:write',
       'products:view', 'products:write',
+      'materials:view', 'materials:write',
+      'production:view', 'production:write',
+      'hpp:view',
       'users:manage',
     ],
   },
   {
     name: 'Operator',
-    description: 'Edit orders & inventory, tanpa IAM',
+    description: 'Edit semua data operasional, tanpa IAM',
     permissions: [
       'dashboard:view',
       'orders:view', 'orders:write',
+      'purchases:view', 'purchases:write',
       'products:view', 'products:write',
+      'materials:view', 'materials:write',
+      'production:view', 'production:write',
+      'hpp:view',
     ],
   },
   {
@@ -43,7 +51,11 @@ const ROLES = [
     permissions: [
       'dashboard:view',
       'orders:view',
+      'purchases:view',
       'products:view',
+      'materials:view',
+      'production:view',
+      'hpp:view',
     ],
   },
 ];
