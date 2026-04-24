@@ -54,7 +54,7 @@ export function Sidebar() {
         <Image src="/logo.svg" alt="Alucurv" width={40} height={40} priority />
         <div>
           <div className="font-bold text-lg leading-tight tracking-tight">Alucurv</div>
-          <div className="text-[11px] text-slate-500 leading-tight">ERP Manual Input</div>
+          <div className="text-[11px] text-slate-500 leading-tight">ERP Order Management</div>
         </div>
       </div>
 
