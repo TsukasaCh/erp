@@ -43,6 +43,17 @@ const NAV: NavItem[] = [
   { kind: 'link', href: '/hpp', label: 'Kalkulator HPP', icon: IconCalc, permission: 'hpp:view' },
   { kind: 'link', href: '/products', label: 'Inventory', icon: IconProducts, permission: 'products:view' },
   { kind: 'link', href: '/materials', label: 'Master Data Bahan', icon: IconBox, permission: 'materials:view' },
+  {
+    kind: 'group',
+    id: 'hrd',
+    label: 'HRD & Payroll',
+    icon: IconHRD,
+    children: [
+      { kind: 'link', href: '/hrd/karyawan', label: 'Data Karyawan', permission: 'hrd:view' },
+      { kind: 'link', href: '/hrd/absensi', label: 'Absensi & Lembur', permission: 'hrd:view' },
+      { kind: 'link', href: '/hrd/penggajian', label: 'Penggajian', permission: 'hrd:view' },
+    ],
+  },
   { kind: 'link', href: '/users', label: 'Users & Roles', icon: IconUsers, permission: 'users:manage' },
 ];
 
@@ -279,6 +290,17 @@ function IconBox({ className = '' }: { className?: string }) {
       <path d="M21 8 12 3 3 8l9 5 9-5Z" />
       <path d="M3 8v8l9 5 9-5V8" />
       <line x1="12" y1="13" x2="12" y2="21" />
+    </svg>
+  );
+}
+
+function IconHRD({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   );
 }
