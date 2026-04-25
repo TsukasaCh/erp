@@ -10,6 +10,9 @@ import { productionRouter } from './routes/production';
 import { authRouter } from './routes/auth';
 import { usersRouter } from './routes/users';
 import { rolesRouter } from './routes/roles';
+import { employeesRouter } from './routes/employees';
+import { attendanceRouter } from './routes/attendance';
+import { payrollRouter } from './routes/payroll';
 import { requireAuth } from './middleware/auth';
 
 const app = express();
@@ -28,6 +31,9 @@ app.use('/api/products',        requireAuth, productsRouter);
 app.use('/api/materials',       requireAuth, materialsRouter);
 app.use('/api/purchase-orders', requireAuth, purchasesRouter);
 app.use('/api/production',      requireAuth, productionRouter);
+app.use('/api/employees',       requireAuth, employeesRouter);
+app.use('/api/attendance',      requireAuth, attendanceRouter);
+app.use('/api/payroll',         requireAuth, payrollRouter);
 app.use('/api/users',           usersRouter);
 app.use('/api/roles',           rolesRouter);
 

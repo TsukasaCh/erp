@@ -29,6 +29,7 @@ const ROLES = [
       'materials:view', 'materials:write',
       'production:view', 'production:write',
       'hpp:view',
+      'hrd:view', 'hrd:write',
       'users:manage',
     ],
   },
@@ -43,6 +44,7 @@ const ROLES = [
       'materials:view', 'materials:write',
       'production:view', 'production:write',
       'hpp:view',
+      'hrd:view', 'hrd:write',
     ],
   },
   {
@@ -56,6 +58,7 @@ const ROLES = [
       'materials:view',
       'production:view',
       'hpp:view',
+      'hrd:view',
     ],
   },
 ];

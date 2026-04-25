@@ -111,6 +111,71 @@ model PurchaseOrder {
   @@index([status])
 }
 
+// Karyawan / Employee
+model Employee {
+  id          String   @id @default(uuid())
+  nik         String   @unique
+  fullName    String
+  position    String?  // Jabatan
+  department  String?  // Departemen
+  status      String   @default("aktif") // aktif, cuti, resign, kontrak, tetap
+  joinedAt    DateTime @default(now())
+  phone       String?
+  email       String?
+  baseSalary  Float    @default(0)   // gaji pokok bulanan
+  allowance   Float    @default(0)   // tunjangan tetap
+  overtimeRate Float   @default(0)   // tarif lembur per jam
+  note        String?
+  attendances Attendance[]
+  payrolls    Payroll[]
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([nik])
+  @@index([department])
+}
+
+// Absensi & Lembur
+model Attendance {
+  id           String   @id @default(uuid())
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date         DateTime
+  checkIn      String?  // format "HH:mm"
+  checkOut     String?  // format "HH:mm"
+  status       String   @default("hadir") // hadir, izin, sakit, alpha, cuti
+  overtimeHours Float   @default(0)
+  note         String?
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  @@index([date])
+  @@index([employeeId])
+  @@unique([employeeId, date])
+}
+
+// Penggajian
+model Payroll {
+  id           String   @id @default(uuid())
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  period       String   // format "YYYY-MM"
+  baseSalary   Float    @default(0)
+  allowance    Float    @default(0)
+  overtimePay  Float    @default(0)
+  deduction    Float    @default(0)
+  netSalary    Float    @default(0)
+  status       String   @default("draft") // draft, paid
+  paidAt       DateTime?
+  note         String?
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  @@index([period])
+  @@index([status])
+  @@unique([employeeId, period])
+}
+
 // Jadwal produksi
 model ProductionSchedule {
   id           String   @id @default(uuid())
