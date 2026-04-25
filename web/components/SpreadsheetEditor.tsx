@@ -1,7 +1,9 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-export type ColumnType = 'text' | 'number' | 'date' | 'datetime' | 'select' | 'readonly';
+export type ColumnType = 'text' | 'number' | 'date' | 'datetime' | 'time' | 'select' | 'readonly';
+
+export type SelectOption = string | { label: string; value: string };
 
 export interface ColumnDef<Row> {
   key: keyof Row & string;
@@ -9,9 +11,13 @@ export interface ColumnDef<Row> {
   type?: ColumnType;
   width?: number;
   align?: 'left' | 'right' | 'center';
-  options?: string[];
+  options?: SelectOption[];
   format?: (value: unknown, row: Row) => string;
   computed?: (row: Row) => unknown; // auto-fill value on edit
+}
+
+function normalizeOption(o: SelectOption): { label: string; value: string } {
+  return typeof o === 'string' ? { label: o, value: o } : o;
 }
 
 export interface SpreadsheetRow {
@@ -453,6 +459,8 @@ function EditInput<Row extends SpreadsheetRow>({
       onCommit(val ? new Date(val).toISOString() : null);
     } else if (column.type === 'date') {
       onCommit(val || null);
+    } else if (column.type === 'time') {
+      onCommit(val || null);
     } else {
       onCommit(val === '' ? null : val);
     }
@@ -474,9 +482,10 @@ function EditInput<Row extends SpreadsheetRow>({
         className="w-full px-2 py-1 border border-blue-400 rounded text-sm"
       >
         <option value="" />
-        {column.options?.map((o) => (
-          <option key={o} value={o}>{o}</option>
-        ))}
+        {column.options?.map((o) => {
+          const opt = normalizeOption(o);
+          return <option key={opt.value} value={opt.value}>{opt.label}</option>;
+        })}
       </select>
     );
   }
@@ -484,7 +493,7 @@ function EditInput<Row extends SpreadsheetRow>({
   return (
     <input
       ref={(el) => { inputRef.current = el; }}
-      type={column.type === 'number' ? 'number' : column.type === 'date' ? 'date' : column.type === 'datetime' ? 'datetime-local' : 'text'}
+      type={column.type === 'number' ? 'number' : column.type === 'date' ? 'date' : column.type === 'datetime' ? 'datetime-local' : column.type === 'time' ? 'time' : 'text'}
       value={val}
       onChange={(e) => setVal(e.target.value)}
       onBlur={commit}

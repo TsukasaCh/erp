@@ -22,6 +22,11 @@ const querySchema = z.object({
   employeeId: z.string().optional(),
 });
 
+const batchSchema = z.object({
+  upserts: z.array(attendanceInput).default([]),
+  deletes: z.array(z.string()).default([]),
+});
+
 attendanceRouter.get('/', requirePermission('hrd:view'), async (req, res) => {
   const parsed = querySchema.safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -102,6 +107,44 @@ attendanceRouter.patch('/:id', requirePermission('hrd:write'), async (req, res) 
     const msg = e instanceof Error ? e.message : 'update_failed';
     res.status(400).json({ error: msg });
   }
+});
+
+attendanceRouter.post('/batch', requirePermission('hrd:write'), async (req, res) => {
+  const parsed = batchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const { upserts, deletes } = parsed.data;
+
+  const saved = [];
+  for (const a of upserts) {
+    const { id, ...data } = a;
+    if (id && id.length > 0) {
+      try {
+        const updated = await prisma.attendance.update({ where: { id }, data });
+        saved.push(updated);
+      } catch {
+        const created = await prisma.attendance.upsert({
+          where: { employeeId_date: { employeeId: data.employeeId, date: data.date } },
+          update: data,
+          create: data,
+        });
+        saved.push(created);
+      }
+    } else {
+      const created = await prisma.attendance.upsert({
+        where: { employeeId_date: { employeeId: data.employeeId, date: data.date } },
+        update: data,
+        create: data,
+      });
+      saved.push(created);
+    }
+  }
+
+  let deletedCount = 0;
+  if (deletes.length > 0) {
+    const result = await prisma.attendance.deleteMany({ where: { id: { in: deletes } } });
+    deletedCount = result.count;
+  }
+  res.json({ saved, deleted: deletedCount });
 });
 
 attendanceRouter.delete('/:id', requirePermission('hrd:write'), async (req, res) => {
