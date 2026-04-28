@@ -110,7 +110,7 @@ export function Sidebar() {
 
   const logout = () => {
     clearAuth();
-    router.replace('/login');
+    window.location.href = '/login';
   };
 
   return (
