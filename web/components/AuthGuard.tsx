@@ -19,13 +19,18 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       return;
     }
     // validate token server-side; will clearAuth + redirect if expired
-    refreshMe().then((user) => {
-      if (!user) {
+    refreshMe()
+      .then((user) => {
+        if (!user) {
+          router.replace('/login');
+        } else {
+          setChecking(false);
+        }
+      })
+      .catch(() => {
+        // Network error or unexpected failure — redirect to login
         router.replace('/login');
-      } else {
-        setChecking(false);
-      }
-    });
+      });
   }, [pathname, router]);
 
   if (pathname === '/login') return <>{children}</>;

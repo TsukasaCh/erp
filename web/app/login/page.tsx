@@ -1,19 +1,19 @@
 'use client';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { login, getToken } from '@/lib/auth';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (getToken()) router.replace('/');
-  }, [router]);
+    if (getToken()) {
+      window.location.href = '/';
+    }
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +21,9 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(username.trim(), password);
-      router.replace('/');
+      // Full page reload so that AuthGuard, Sidebar, etc. mount fresh
+      // with the new token — avoids client-side hydration/state mismatch.
+      window.location.href = '/';
     } catch (err) {
       const msg = (err as Error).message;
       setError(msg === 'invalid_credentials' ? 'Username atau password salah.' : msg);
