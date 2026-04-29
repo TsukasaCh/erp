@@ -184,7 +184,8 @@ export default function ProductionPage() {
             return (
               <div
                 key={idx}
-                className={`min-h-[112px] border-r border-b border-slate-200 p-1.5 flex flex-col gap-1 ${
+                onClick={() => openNew(date)}
+                className={`min-h-[112px] border-r border-b border-slate-200 p-1.5 flex flex-col gap-1 cursor-pointer hover:ring-inset hover:ring-2 hover:ring-slate-100 transition-all ${
                   !isCurrent ? 'bg-slate-50/70' : isWeekend ? 'bg-slate-50/40' : ''
                 }`}
               >
@@ -208,7 +209,7 @@ export default function ProductionPage() {
                     return (
                       <button
                         key={s.id}
-                        onClick={() => openEdit(s)}
+                        onClick={(e) => { e.stopPropagation(); openEdit(s); }}
                         className={`text-left text-xs rounded px-1.5 py-0.5 ${meta.bg} ${meta.text} truncate hover:ring-1 hover:ring-slate-300`}
                         title={`${s.productName} · ${s.quantity} pcs · ${meta.label}`}
                       >
@@ -252,7 +253,7 @@ export default function ProductionPage() {
                   className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
                 />
               </Field>
-              <Field label="Nama Produk">
+              <Field label="Nama Produk / Kejadian">
                 <input
                   value={editing.productName ?? ''}
                   onChange={(e) => setEditing((p) => ({ ...p!, productName: e.target.value }))}
