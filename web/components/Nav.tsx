@@ -36,7 +36,7 @@ const NAV: NavItem[] = [
     icon: IconOrders,
     children: [
       { kind: 'link', href: '/orders', label: 'Penjualan', permission: 'orders:view' },
-      { kind: 'link', href: '/purchase-orders', label: 'Belanja Bahan', permission: 'purchases:view' },
+      { kind: 'link', href: '/purchase-orders', label: 'Pembelian PO', permission: 'purchases:view' },
     ],
   },
   { kind: 'link', href: '/production', label: 'Kalender Produksi', icon: IconCalendar, permission: 'production:view' },

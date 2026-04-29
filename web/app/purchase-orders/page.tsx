@@ -154,7 +154,7 @@ export default function PurchaseOrdersPage() {
         <header className="mb-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">
-              {mode.addNew ? 'Tambah Belanja Bahan' : 'Edit Belanja Bahan'}
+              {mode.addNew ? 'Tambah Pembelian PO' : 'Edit Pembelian PO'}
             </h1>
             <p className="text-sm text-slate-500">
               Double-click sel untuk edit. Ctrl+S simpan · Ctrl+Z undo · Del hapus baris.
@@ -199,7 +199,7 @@ export default function PurchaseOrdersPage() {
     <div className="space-y-5">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Belanja Bahan</h1>
+          <h1 className="text-2xl font-bold">Pembelian PO</h1>
           <p className="text-sm text-slate-500 mt-1">Tracking pembelian bahan baku ke supplier.</p>
         </div>
         <div className="flex items-center gap-2">
