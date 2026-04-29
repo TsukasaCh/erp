@@ -69,7 +69,7 @@ export default function PurchaseOrdersPage() {
 
   const { data: materials } = useSWR<Material[]>('/api/materials', fetcher);
 
-  const editorColumns: ColumnDef<PurchaseOrder>([]) = useMemo(() => {
+  const editorColumns: ColumnDef<PurchaseOrder>[] = useMemo(() => {
     return [
       { key: 'poNo', label: 'No. PO', type: 'text', width: 140 },
       { key: 'orderedAt', label: 'Tanggal', type: 'datetime', width: 170 },
