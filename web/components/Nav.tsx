@@ -41,7 +41,6 @@ const NAV: NavItem[] = [
   },
   { kind: 'link', href: '/production', label: 'Kalender Produksi', icon: IconCalendar, permission: 'production:view' },
   { kind: 'link', href: '/hpp', label: 'Kalkulator HPP', icon: IconCalc, permission: 'hpp:view' },
-  { kind: 'link', href: '/products', label: 'Inventory', icon: IconProducts, permission: 'products:view' },
   {
     kind: 'group',
     id: 'bahan',
