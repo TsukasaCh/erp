@@ -1,15 +1,17 @@
 import { prisma } from './db/client';
 import { hashPassword } from './services/auth';
 
+const PRODUCT_CATEGORIES = ['Pintu', 'Jendela', 'Kusen', 'Aksesoris', 'Material', 'Jasa'];
+
 const PRODUCTS = [
-  { sku: 'ALU-SLIDE-3M', name: 'Aluminium Sliding Door 3m', category: 'Pintu', stock: 25, price: 2500000 },
-  { sku: 'ALU-SLIDE-2M', name: 'Aluminium Sliding Door 2m', category: 'Pintu', stock: 18, price: 1800000 },
-  { sku: 'ALU-WIN-120',  name: 'Aluminium Window 120cm',    category: 'Jendela', stock: 40, price: 950000 },
-  { sku: 'ALU-WIN-90',   name: 'Aluminium Window 90cm',     category: 'Jendela', stock: 32, price: 750000 },
-  { sku: 'ALU-ARC-150',  name: 'Kusen Lengkung 150cm',      category: 'Kusen',   stock: 8,  price: 1400000 },
-  { sku: 'HNDL-SET-SLV', name: 'Handle Set Silver',          category: 'Aksesoris', stock: 120, price: 85000 },
-  { sku: 'ROLR-4INC',    name: 'Roller Bearing 4 inch',      category: 'Aksesoris', stock: 6,   price: 45000 },
-  { sku: 'SEAL-RBR-5M',  name: 'Karet Seal 5m',              category: 'Aksesoris', stock: 55,  price: 75000 },
+  { sku: 'ALU-SLIDE-3M', name: 'Aluminium Sliding Door 3m', categoryName: 'Pintu', stock: 25, price: 2500000 },
+  { sku: 'ALU-SLIDE-2M', name: 'Aluminium Sliding Door 2m', categoryName: 'Pintu', stock: 18, price: 1800000 },
+  { sku: 'ALU-WIN-120',  name: 'Aluminium Window 120cm',    categoryName: 'Jendela', stock: 40, price: 950000 },
+  { sku: 'ALU-WIN-90',   name: 'Aluminium Window 90cm',     categoryName: 'Jendela', stock: 32, price: 750000 },
+  { sku: 'ALU-ARC-150',  name: 'Kusen Lengkung 150cm',      categoryName: 'Kusen',   stock: 8,  price: 1400000 },
+  { sku: 'HNDL-SET-SLV', name: 'Handle Set Silver',          categoryName: 'Aksesoris', stock: 120, price: 85000 },
+  { sku: 'ROLR-4INC',    name: 'Roller Bearing 4 inch',      categoryName: 'Aksesoris', stock: 6,   price: 45000 },
+  { sku: 'SEAL-RBR-5M',  name: 'Karet Seal 5m',              categoryName: 'Aksesoris', stock: 55,  price: 75000 },
 ];
 
 const BUYERS = ['Pak Andi', 'Bu Dewi', 'Toko Jaya', 'CV Maju', 'Bu Sari', 'Pak Budi', 'Toko Sinar', 'Pak Joko'];
@@ -117,14 +119,38 @@ async function seedDemoData() {
     console.log('  products already exist, skipping product/order seed');
     return;
   }
-  await prisma.product.createMany({ data: PRODUCTS });
+
+  // Create product categories
+  const categoryMap = new Map<string, string>();
+  for (const cat of PRODUCT_CATEGORIES) {
+    const created = await prisma.productCategory.upsert({
+      where: { name: cat },
+      create: { name: cat },
+      update: {},
+    });
+    categoryMap.set(cat, created.id);
+  }
+  console.log(`  ${PRODUCT_CATEGORIES.length} product categories`);
+
+  // Create products with category relations
+  const createdProducts = [];
+  for (const p of PRODUCTS) {
+    const { categoryName, ...data } = p;
+    const product = await prisma.product.upsert({
+      where: { sku: data.sku },
+      create: { ...data, categoryId: categoryMap.get(categoryName) ?? null },
+      update: { ...data, categoryId: categoryMap.get(categoryName) ?? null },
+    });
+    createdProducts.push(product);
+  }
   console.log(`  ${PRODUCTS.length} products`);
 
+  // Create demo orders linked to products
   let orderCount = 0;
   for (let dayOffset = 13; dayOffset >= 0; dayOffset--) {
     const ordersPerDay = randInt(2, 8);
     for (let i = 0; i < ordersPerDay; i++) {
-      const product = rand(PRODUCTS);
+      const product = rand(createdProducts);
       const qty = randInt(1, 4);
       const platform = rand(PLATFORMS);
       const orderedAt = new Date(Date.now() - dayOffset * 86400000 - randInt(0, 86400) * 1000);
@@ -135,6 +161,7 @@ async function seedDemoData() {
           orderedAt,
           platform,
           buyer: rand(BUYERS),
+          productId: product.id,
           sku: product.sku,
           productName: product.name,
           quantity: qty,

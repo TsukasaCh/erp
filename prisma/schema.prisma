@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -35,16 +35,28 @@ model Role {
   updatedAt   DateTime @updatedAt
 }
 
+// Master Kategori Produk
+model ProductCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  products    Product[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model Product {
-  id        String   @id @default(uuid())
-  sku       String   @unique
-  name      String
-  category  String?
-  stock     Int      @default(0)
-  price     Float    @default(0)
-  note      String?
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  sku        String   @unique
+  name       String
+  categoryId String?
+  category   ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  stock      Int      @default(0)
+  price      Float    @default(0)
+  note       String?
+  orders     Order[]
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
 
   @@index([sku])
   @@index([updatedAt])
@@ -56,6 +68,8 @@ model Order {
   orderedAt   DateTime @default(now())
   platform    String?
   buyer       String?
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
   sku         String?
   productName String?
   quantity    Int      @default(1)
@@ -69,21 +83,24 @@ model Order {
   @@index([orderedAt])
   @@index([status])
   @@index([sku])
+  @@index([productId])
 }
 
 // Master data bahan baku (aluminium, kaca, handle, dst.)
 model Material {
-  id        String   @id @default(uuid())
-  code      String   @unique
-  name      String
-  category  String?
-  unit      String   @default("pcs") // kg, m, batang, pcs, lembar, etc.
-  stock     Float    @default(0)
-  price     Float    @default(0)     // harga beli per unit
-  supplier  String?
-  note      String?
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
+  id             String   @id @default(uuid())
+  code           String   @unique
+  name           String
+  category       String?
+  unit           String   @default("pcs") // kg, m, batang, pcs, lembar, etc.
+  stock          Float    @default(0)
+  price          Float    @default(0)     // harga beli per unit
+  supplier       String?
+  note           String?
+  purchaseOrders PurchaseOrder[]
+  usages         MaterialUsage[]
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
 
   @@index([code])
   @@index([category])
@@ -95,6 +112,8 @@ model PurchaseOrder {
   poNo          String?
   orderedAt     DateTime @default(now())
   supplier      String?
+  materialId    String?
+  material      Material? @relation(fields: [materialId], references: [id], onDelete: SetNull)
   materialCode  String?
   materialName  String?
   quantity      Float    @default(1)
@@ -102,6 +121,7 @@ model PurchaseOrder {
   price         Float    @default(0)
   total         Float    @default(0)
   status        String   @default("pending") // pending, received, cancelled
+  stockAdjusted Boolean  @default(false) // track if stock was already added
   expectedAt    DateTime?
   note          String?
   updatedAt     DateTime @updatedAt
@@ -109,6 +129,23 @@ model PurchaseOrder {
 
   @@index([orderedAt])
   @@index([status])
+  @@index([materialId])
+}
+
+// Pencatatan pengeluaran / penggunaan bahan baku
+model MaterialUsage {
+  id          String   @id @default(uuid())
+  materialId  String
+  material    Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  quantity    Float    @default(0)
+  usageDate   DateTime @default(now())
+  purpose     String?  // e.g. "Produksi Jendela Casement", "Proyek A"
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([materialId])
+  @@index([usageDate])
 }
 
 // Karyawan / Employee

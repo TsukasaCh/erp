@@ -3,7 +3,16 @@ import useSWR from 'swr';
 import { useMemo, useState } from 'react';
 import { fetcher, formatRupiah, postJSON } from '@/lib/api';
 import { platformColor, platformBadgeClass } from '@/lib/colors';
-import { SpreadsheetEditor, type ColumnDef } from '@/components/SpreadsheetEditor';
+import { SearchSelect, type SearchSelectOption } from '@/components/SearchSelect';
+
+interface Product {
+  id: string;
+  sku: string;
+  name: string;
+  stock: number;
+  price: number;
+  category?: { id: string; name: string } | null;
+}
 
 interface Order {
   id?: string;
@@ -11,6 +20,7 @@ interface Order {
   orderedAt?: string;
   platform?: string | null;
   buyer?: string | null;
+  productId?: string | null;
   sku?: string | null;
   productName?: string | null;
   quantity: number;
@@ -18,10 +28,7 @@ interface Order {
   total: number;
   status: string;
   note?: string | null;
-  _localId?: string;
-  _dirty?: boolean;
-  _new?: boolean;
-  _deleted?: boolean;
+  product?: Product | null;
   [k: string]: unknown;
 }
 
@@ -38,47 +45,34 @@ const TABS: { key: string; label: string }[] = [
   { key: 'all', label: 'Semua' },
 ];
 
-const editorColumns: ColumnDef<Order>[] = [
-  { key: 'orderNo', label: 'No. Order', type: 'text', width: 130 },
-  { key: 'orderedAt', label: 'Tanggal', type: 'datetime', width: 170 },
-  { key: 'platform', label: 'Platform', type: 'select', options: PLATFORMS, width: 120 },
-  { key: 'buyer', label: 'Pembeli', type: 'text', width: 160 },
-  { key: 'sku', label: 'SKU', type: 'text', width: 140 },
-  { key: 'productName', label: 'Produk', type: 'text', width: 220 },
-  { key: 'quantity', label: 'Qty', type: 'number', width: 70, align: 'right' },
-  { key: 'price', label: 'Harga', type: 'number', width: 120, align: 'right',
-    format: (v) => v == null ? '' : `Rp ${Number(v).toLocaleString('id-ID')}` },
-  { key: 'total', label: 'Total', type: 'readonly', width: 140, align: 'right',
-    format: (_v, row) => {
-      const t = Number(row.quantity ?? 0) * Number(row.price ?? 0);
-      return `Rp ${t.toLocaleString('id-ID')}`;
-    },
-    computed: (row) => Number(row.quantity ?? 0) * Number(row.price ?? 0),
-  },
-  { key: 'status', label: 'Status', type: 'select', options: STATUSES, width: 120 },
-  { key: 'note', label: 'Catatan', type: 'text', width: 200 },
-];
-
-type Mode =
-  | { kind: 'view' }
-  | { kind: 'edit'; focusId?: string; addNew?: boolean };
-
 type SortKey = 'orderNo' | 'orderedAt' | 'platform' | 'buyer' | 'productName' | 'quantity' | 'total' | 'status';
 type SortDir = 'asc' | 'desc';
 
 export default function OrdersPage() {
-  const [mode, setMode] = useState<Mode>({ kind: 'view' });
   const [status, setStatus] = useState<string>('to_ship');
   const [platform, setPlatform] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'orderedAt', dir: 'desc' });
+  const [showForm, setShowForm] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
   const { data, error, isLoading, mutate } = useSWR<ListResponse>(
     `/api/orders?status=${status}&pageSize=500`,
     fetcher,
   );
 
-  // Platform counts (computed from current status filter)
+  const { data: products } = useSWR<Product[]>('/api/products', fetcher);
+
+  const productOptions: SearchSelectOption[] = useMemo(() => {
+    if (!products) return [];
+    return products.map((p) => ({
+      value: p.id,
+      label: `${p.sku} - ${p.name} (Stok: ${p.stock})`,
+      data: p as unknown as Record<string, unknown>,
+    }));
+  }, [products]);
+
+  // Platform counts
   const platformCounts = useMemo(() => {
     if (!data) return new Map<string, number>();
     const m = new Map<string, number>();
@@ -105,7 +99,6 @@ export default function OrdersPage() {
     const sorted = [...rows].sort((a, b) => {
       const av = a[sort.key];
       const bv = b[sort.key];
-      // null/undefined go to the end
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
@@ -120,48 +113,6 @@ export default function OrdersPage() {
   if (error) return <div className="text-red-600">Error: {String(error)}</div>;
   if (isLoading || !data) return <div className="text-slate-500">Loading…</div>;
 
-  if (mode.kind === 'edit') {
-    return (
-      <div className="flex flex-col h-[calc(100vh-4rem)]">
-        <header className="mb-4">
-          <h1 className="text-2xl font-bold">
-            {mode.addNew ? 'Tambah Order' : 'Edit Orders'}
-          </h1>
-          <p className="text-sm text-slate-500">
-            Double-click sel untuk edit. Ctrl+S simpan · Ctrl+Z undo · Del hapus baris.
-          </p>
-        </header>
-
-        <div className="flex-1 min-h-0">
-          <SpreadsheetEditor<Order>
-            columns={editorColumns}
-            initialRows={data.items}
-            autoAddRow={mode.addNew}
-            focusRowId={mode.focusId}
-            onClose={() => setMode({ kind: 'view' })}
-            onRowTemplate={() => ({
-              orderNo: '',
-              orderedAt: new Date().toISOString(),
-              platform: null,
-              buyer: '',
-              sku: '',
-              productName: '',
-              quantity: 1,
-              price: 0,
-              total: 0,
-              status: 'to_ship',
-              note: null,
-            })}
-            onSave={async ({ upserts, deletes }) => {
-              await postJSON('/api/orders/batch', { upserts, deletes });
-              await mutate();
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
-
   const toggleSort = (key: SortKey) => {
     setSort((prev) => prev.key === key
       ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
@@ -171,6 +122,64 @@ export default function OrdersPage() {
 
   const totalFiltered = filteredSorted.length;
   const totalRevenue = filteredSorted.reduce((s, o) => s + Number(o.total ?? 0), 0);
+
+  const handleEdit = (order: Order) => {
+    setEditingOrder({ ...order });
+    setShowForm(true);
+  };
+
+  const handleNew = () => {
+    setEditingOrder({
+      orderNo: '',
+      orderedAt: new Date().toISOString(),
+      platform: null,
+      buyer: '',
+      productId: null,
+      sku: '',
+      productName: '',
+      quantity: 1,
+      price: 0,
+      total: 0,
+      status: 'to_ship',
+      note: null,
+    });
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
+    if (!editingOrder) return;
+    const payload = {
+      upserts: [{
+        id: editingOrder.id,
+        orderNo: editingOrder.orderNo,
+        orderedAt: editingOrder.orderedAt,
+        platform: editingOrder.platform,
+        buyer: editingOrder.buyer,
+        productId: editingOrder.productId,
+        sku: editingOrder.sku,
+        productName: editingOrder.productName,
+        quantity: Number(editingOrder.quantity ?? 1),
+        price: Number(editingOrder.price ?? 0),
+        total: Number(editingOrder.quantity ?? 1) * Number(editingOrder.price ?? 0),
+        status: editingOrder.status ?? 'to_ship',
+        note: editingOrder.note,
+      }],
+      deletes: [] as string[],
+    };
+    await postJSON('/api/orders/batch', payload);
+    await mutate();
+    setShowForm(false);
+    setEditingOrder(null);
+  };
+
+  const handleDelete = async () => {
+    if (!editingOrder?.id) return;
+    if (!confirm('Hapus order ini?')) return;
+    await postJSON('/api/orders/batch', { upserts: [], deletes: [editingOrder.id] });
+    await mutate();
+    setShowForm(false);
+    setEditingOrder(null);
+  };
 
   return (
     <div className="space-y-5">
@@ -184,13 +193,7 @@ export default function OrdersPage() {
             className="border rounded px-3 py-1.5 bg-white text-sm w-60"
           />
           <button
-            onClick={() => setMode({ kind: 'edit' })}
-            className="px-3 py-1.5 border border-slate-300 rounded text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5"
-          >
-            <EditIcon className="w-4 h-4" /> Edit
-          </button>
-          <button
-            onClick={() => setMode({ kind: 'edit', addNew: true })}
+            onClick={handleNew}
             className="px-4 py-1.5 bg-slate-900 text-white rounded text-sm font-semibold hover:bg-slate-700"
           >
             + Tambah Order
@@ -293,7 +296,7 @@ export default function OrdersPage() {
                 </td>
                 <td className="px-2 py-3">
                   <button
-                    onClick={() => setMode({ kind: 'edit', focusId: o.id })}
+                    onClick={() => handleEdit(o)}
                     className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-slate-200 rounded transition-opacity"
                     title="Edit"
                   >
@@ -305,6 +308,214 @@ export default function OrdersPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Order Form Modal */}
+      {showForm && editingOrder && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 p-4"
+          onClick={() => { setShowForm(false); setEditingOrder(null); }}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="font-semibold">{editingOrder.id ? 'Edit Order' : 'Tambah Order Baru'}</h3>
+              <button onClick={() => { setShowForm(false); setEditingOrder(null); }} className="text-slate-400 hover:text-slate-600 text-xl leading-none">×</button>
+            </div>
+            <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="No. Order">
+                  <input
+                    value={editingOrder.orderNo ?? ''}
+                    onChange={(e) => setEditingOrder((p) => ({ ...p!, orderNo: e.target.value }))}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                  />
+                </Field>
+                <Field label="Tanggal">
+                  <input
+                    type="datetime-local"
+                    value={editingOrder.orderedAt ? toLocalInput(editingOrder.orderedAt) : ''}
+                    onChange={(e) => setEditingOrder((p) => ({ ...p!, orderedAt: new Date(e.target.value).toISOString() }))}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                  />
+                </Field>
+              </div>
+
+              <Field label="Produk (dari Inventory)">
+                <SearchSelect
+                  options={productOptions}
+                  value={editingOrder.productId}
+                  onChange={(val, opt) => {
+                    if (opt && opt.data) {
+                      const prod = opt.data as unknown as Product;
+                      setEditingOrder((p) => ({
+                        ...p!,
+                        productId: val,
+                        sku: prod.sku,
+                        productName: prod.name,
+                        price: prod.price,
+                        total: (p?.quantity ?? 1) * prod.price,
+                      }));
+                    } else {
+                      setEditingOrder((p) => ({
+                        ...p!,
+                        productId: null,
+                        sku: '',
+                        productName: '',
+                        price: 0,
+                        total: 0,
+                      }));
+                    }
+                  }}
+                  placeholder="Pilih produk dari inventory..."
+                />
+                {editingOrder.productId && products && (() => {
+                  const prod = products.find((p) => p.id === editingOrder.productId);
+                  if (prod && editingOrder.quantity > prod.stock) {
+                    return (
+                      <div className="mt-1 text-xs text-red-600 font-medium">
+                        ⚠ Stok tidak cukup! Sisa: {prod.stock} pcs
+                      </div>
+                    );
+                  }
+                  if (prod) {
+                    return (
+                      <div className="mt-1 text-xs text-slate-500">
+                        Stok tersedia: {prod.stock} pcs
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </Field>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Platform">
+                  <select
+                    value={editingOrder.platform ?? ''}
+                    onChange={(e) => setEditingOrder((p) => ({ ...p!, platform: e.target.value || null }))}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white"
+                  >
+                    <option value="">-- Pilih --</option>
+                    {PLATFORMS.map((pl) => <option key={pl} value={pl}>{pl}</option>)}
+                  </select>
+                </Field>
+                <Field label="Pembeli">
+                  <input
+                    value={editingOrder.buyer ?? ''}
+                    onChange={(e) => setEditingOrder((p) => ({ ...p!, buyer: e.target.value }))}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                  />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Qty">
+                  <input
+                    type="number"
+                    min={1}
+                    value={editingOrder.quantity ?? 1}
+                    onChange={(e) => {
+                      const qty = Number(e.target.value) || 1;
+                      setEditingOrder((p) => ({
+                        ...p!,
+                        quantity: qty,
+                        total: qty * Number(p?.price ?? 0),
+                      }));
+                    }}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                  />
+                </Field>
+                <Field label="Harga">
+                  <input
+                    type="number"
+                    min={0}
+                    value={editingOrder.price ?? 0}
+                    onChange={(e) => {
+                      const price = Number(e.target.value) || 0;
+                      setEditingOrder((p) => ({
+                        ...p!,
+                        price,
+                        total: Number(p?.quantity ?? 1) * price,
+                      }));
+                    }}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                  />
+                </Field>
+                <Field label="Total">
+                  <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm font-medium text-slate-700">
+                    {formatRupiah(Number(editingOrder.quantity ?? 1) * Number(editingOrder.price ?? 0))}
+                  </div>
+                </Field>
+              </div>
+
+              <Field label="Status">
+                <select
+                  value={editingOrder.status ?? 'to_ship'}
+                  onChange={(e) => setEditingOrder((p) => ({ ...p!, status: e.target.value }))}
+                  className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white"
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>{STATUS_LABELS[s] ?? s}</option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Catatan">
+                <textarea
+                  rows={2}
+                  value={editingOrder.note ?? ''}
+                  onChange={(e) => setEditingOrder((p) => ({ ...p!, note: e.target.value }))}
+                  className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                />
+              </Field>
+            </div>
+            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div>
+                {editingOrder.id && (
+                  <button
+                    onClick={handleDelete}
+                    className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded"
+                  >
+                    Hapus
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setShowForm(false); setEditingOrder(null); }}
+                  className="px-3 py-1.5 text-sm border border-slate-300 rounded hover:bg-white"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="px-4 py-1.5 text-sm bg-slate-900 text-white rounded font-semibold hover:bg-slate-700"
+                >
+                  Simpan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  to_ship: 'Perlu Dikirim',
+  shipped: 'Dikirim',
+  completed: 'Selesai',
+  cancelled: 'Cancel',
+};
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">{label}</label>
+      {children}
     </div>
   );
 }
@@ -383,4 +594,10 @@ function EditIcon({ className = '' }: { className?: string }) {
       <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
     </svg>
   );
+}
+
+function toLocalInput(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

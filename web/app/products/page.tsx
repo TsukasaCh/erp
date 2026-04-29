@@ -1,97 +1,126 @@
 'use client';
 import useSWR from 'swr';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { fetcher, formatRupiah, postJSON } from '@/lib/api';
-import { SpreadsheetEditor, type ColumnDef } from '@/components/SpreadsheetEditor';
+import { SearchSelect, type SearchSelectOption } from '@/components/SearchSelect';
+
+interface ProductCategory {
+  id: string;
+  name: string;
+  description?: string | null;
+  _count?: { products: number };
+}
 
 interface Product {
   id?: string;
   sku: string;
   name: string;
-  category?: string | null;
+  categoryId?: string | null;
+  category?: ProductCategory | null;
   stock: number;
   price: number;
   note?: string | null;
   updatedAt?: string;
-  _localId?: string;
-  _dirty?: boolean;
-  _new?: boolean;
-  _deleted?: boolean;
   [k: string]: unknown;
 }
 
-const CATEGORIES = ['Pintu', 'Jendela', 'Kusen', 'Aksesoris', 'Material', 'Jasa'];
-
-const columns: ColumnDef<Product>[] = [
-  { key: 'sku', label: 'SKU', type: 'text', width: 160 },
-  { key: 'name', label: 'Nama Produk', type: 'text', width: 260 },
-  { key: 'category', label: 'Kategori', type: 'select', options: CATEGORIES, width: 130 },
-  { key: 'stock', label: 'Stok', type: 'number', width: 90, align: 'right' },
-  { key: 'price', label: 'Harga', type: 'number', width: 130, align: 'right',
-    format: (v) => v == null ? '' : `Rp ${Number(v).toLocaleString('id-ID')}` },
-  { key: 'note', label: 'Catatan', type: 'text', width: 240 },
-  { key: 'updatedAt', label: 'Update Terakhir', type: 'readonly', width: 150,
-    format: (v) => v ? new Date(String(v)).toLocaleString('id-ID') : '' },
-];
-
-type Mode =
-  | { kind: 'view' }
-  | { kind: 'edit'; focusId?: string; addNew?: boolean };
-
 export default function ProductsPage() {
-  const [mode, setMode] = useState<Mode>({ kind: 'view' });
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [showForm, setShowForm] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+
   const { data, error, isLoading, mutate } = useSWR<Product[]>('/api/products', fetcher);
+  const { data: categories, mutate: mutateCategories } = useSWR<ProductCategory[]>('/api/product-categories', fetcher);
+
+  const categoryOptions: SearchSelectOption[] = useMemo(() => {
+    if (!categories) return [];
+    return categories.map((c) => ({
+      value: c.id,
+      label: c.name,
+    }));
+  }, [categories]);
 
   if (error) return <div className="text-red-600">Error: {String(error)}</div>;
   if (isLoading || !data) return <div className="text-slate-500">Loading…</div>;
 
-  if (mode.kind === 'edit') {
-    return (
-      <div className="flex flex-col h-[calc(100vh-4rem)]">
-        <header className="mb-4">
-          <h1 className="text-2xl font-bold">
-            {mode.addNew ? 'Tambah Produk' : 'Edit Inventory'}
-          </h1>
-          <p className="text-sm text-slate-500">
-            Double-click sel untuk edit. Ctrl+S simpan · Ctrl+Z undo · Del hapus baris.
-          </p>
-        </header>
-
-        <div className="flex-1 min-h-0">
-          <SpreadsheetEditor<Product>
-            columns={columns}
-            initialRows={data}
-            autoAddRow={mode.addNew}
-            focusRowId={mode.focusId}
-            onClose={() => setMode({ kind: 'view' })}
-            onRowTemplate={() => ({
-              sku: '',
-              name: '',
-              category: null,
-              stock: 0,
-              price: 0,
-              note: null,
-            })}
-            onSave={async ({ upserts, deletes }) => {
-              await postJSON('/api/products/batch', { upserts, deletes });
-              await mutate();
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
-
   const filtered = data.filter((p) => {
-    if (category !== 'all' && p.category !== category) return false;
+    if (categoryFilter !== 'all') {
+      if (!p.category || p.category.id !== categoryFilter) return false;
+    }
     if (search) {
       const s = search.toLowerCase();
       if (!p.name.toLowerCase().includes(s) && !p.sku.toLowerCase().includes(s)) return false;
     }
     return true;
   });
+
+  const handleNew = () => {
+    setEditingProduct({
+      sku: '',
+      name: '',
+      categoryId: null,
+      stock: 0,
+      price: 0,
+      note: null,
+    });
+    setShowForm(true);
+  };
+
+  const handleEdit = (p: Product) => {
+    setEditingProduct({ ...p, categoryId: p.category?.id ?? p.categoryId ?? null });
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
+    if (!editingProduct || !editingProduct.sku || !editingProduct.name) return;
+    const payload = {
+      upserts: [{
+        id: editingProduct.id,
+        sku: editingProduct.sku,
+        name: editingProduct.name,
+        categoryId: editingProduct.categoryId || null,
+        stock: Number(editingProduct.stock ?? 0),
+        price: Number(editingProduct.price ?? 0),
+        note: editingProduct.note,
+      }],
+      deletes: [] as string[],
+    };
+    await postJSON('/api/products/batch', payload);
+    await mutate();
+    setShowForm(false);
+    setEditingProduct(null);
+  };
+
+  const handleDelete = async () => {
+    if (!editingProduct?.id) return;
+    if (!confirm('Hapus produk ini?')) return;
+    await postJSON('/api/products/batch', { upserts: [], deletes: [editingProduct.id] });
+    await mutate();
+    setShowForm(false);
+    setEditingProduct(null);
+  };
+
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    await postJSON('/api/product-categories/batch', {
+      upserts: [{ name: newCategoryName.trim() }],
+      deletes: [],
+    });
+    await mutateCategories();
+    setNewCategoryName('');
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    if (!confirm('Hapus kategori ini? Produk dengan kategori ini akan kehilangan kategorinya.')) return;
+    await postJSON('/api/product-categories/batch', {
+      upserts: [],
+      deletes: [id],
+    });
+    await mutateCategories();
+  };
 
   return (
     <div className="space-y-6">
@@ -105,21 +134,22 @@ export default function ProductsPage() {
             className="border rounded px-3 py-1.5 bg-white text-sm w-56"
           />
           <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
             className="border rounded px-3 py-1.5 bg-white text-sm"
           >
             <option value="all">Semua Kategori</option>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            {categories?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <button
-            onClick={() => setMode({ kind: 'edit' })}
+            onClick={() => setShowCategoryManager(true)}
             className="px-3 py-1.5 border border-slate-300 rounded text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5"
+            title="Kelola Kategori"
           >
-            <EditIcon className="w-4 h-4" /> Edit
+            <TagIcon className="w-4 h-4" /> Kategori
           </button>
           <button
-            onClick={() => setMode({ kind: 'edit', addNew: true })}
+            onClick={handleNew}
             className="px-4 py-1.5 bg-slate-900 text-white rounded text-sm font-semibold hover:bg-slate-700"
           >
             + Tambah Produk
@@ -152,7 +182,7 @@ export default function ProductsPage() {
                 <td className="px-4 py-3">{p.name}</td>
                 <td className="px-4 py-3">
                   {p.category ? (
-                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs">{p.category}</span>
+                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs">{p.category.name}</span>
                   ) : <span className="text-slate-400">-</span>}
                 </td>
                 <td className="px-4 py-3 text-right">
@@ -162,7 +192,7 @@ export default function ProductsPage() {
                 <td className="px-4 py-3 text-slate-600 text-xs">{p.note ?? '-'}</td>
                 <td className="px-2 py-3">
                   <button
-                    onClick={() => setMode({ kind: 'edit', focusId: p.id })}
+                    onClick={() => handleEdit(p)}
                     className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-slate-200 rounded transition-opacity"
                     title="Edit"
                   >
@@ -178,6 +208,164 @@ export default function ProductsPage() {
       <div className="text-xs text-slate-500">
         Menampilkan {filtered.length} dari {data.length} produk
       </div>
+
+      {/* Product Form Modal */}
+      {showForm && editingProduct && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 p-4"
+          onClick={() => { setShowForm(false); setEditingProduct(null); }}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="font-semibold">{editingProduct.id ? 'Edit Produk' : 'Tambah Produk Baru'}</h3>
+              <button onClick={() => { setShowForm(false); setEditingProduct(null); }} className="text-slate-400 hover:text-slate-600 text-xl leading-none">×</button>
+            </div>
+            <div className="p-5 space-y-3">
+              <Field label="SKU">
+                <input
+                  value={editingProduct.sku}
+                  onChange={(e) => setEditingProduct((p) => ({ ...p!, sku: e.target.value }))}
+                  placeholder="mis. ALU-SLIDE-3M"
+                  className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                />
+              </Field>
+              <Field label="Nama Produk">
+                <input
+                  value={editingProduct.name}
+                  onChange={(e) => setEditingProduct((p) => ({ ...p!, name: e.target.value }))}
+                  placeholder="mis. Aluminium Sliding Door 3m"
+                  className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                />
+              </Field>
+              <Field label="Kategori">
+                <SearchSelect
+                  options={categoryOptions}
+                  value={editingProduct.categoryId}
+                  onChange={(val) => setEditingProduct((p) => ({ ...p!, categoryId: val || null }))}
+                  placeholder="Pilih kategori..."
+                />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Stok">
+                  <input
+                    type="number"
+                    min={0}
+                    value={editingProduct.stock}
+                    onChange={(e) => setEditingProduct((p) => ({ ...p!, stock: Number(e.target.value) || 0 }))}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                  />
+                </Field>
+                <Field label="Harga">
+                  <input
+                    type="number"
+                    min={0}
+                    value={editingProduct.price}
+                    onChange={(e) => setEditingProduct((p) => ({ ...p!, price: Number(e.target.value) || 0 }))}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                  />
+                </Field>
+              </div>
+              <Field label="Catatan">
+                <textarea
+                  rows={2}
+                  value={editingProduct.note ?? ''}
+                  onChange={(e) => setEditingProduct((p) => ({ ...p!, note: e.target.value }))}
+                  className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                />
+              </Field>
+            </div>
+            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div>
+                {editingProduct.id && (
+                  <button onClick={handleDelete} className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded">
+                    Hapus
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { setShowForm(false); setEditingProduct(null); }} className="px-3 py-1.5 text-sm border border-slate-300 rounded hover:bg-white">Batal</button>
+                <button
+                  onClick={handleSave}
+                  disabled={!editingProduct.sku || !editingProduct.name}
+                  className="px-4 py-1.5 text-sm bg-slate-900 text-white rounded font-semibold hover:bg-slate-700 disabled:opacity-40"
+                >
+                  Simpan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Category Manager Modal */}
+      {showCategoryManager && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowCategoryManager(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-sm overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="font-semibold">Master Kategori Produk</h3>
+              <button onClick={() => setShowCategoryManager(false)} className="text-slate-400 hover:text-slate-600 text-xl leading-none">×</button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="flex gap-2">
+                <input
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="Nama kategori baru…"
+                  className="flex-1 border border-slate-300 rounded px-3 py-2 text-sm"
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddCategory(); }}
+                />
+                <button
+                  onClick={handleAddCategory}
+                  disabled={!newCategoryName.trim()}
+                  className="px-3 py-2 bg-slate-900 text-white rounded text-sm font-medium hover:bg-slate-700 disabled:opacity-40"
+                >
+                  Tambah
+                </button>
+              </div>
+              <div className="divide-y divide-slate-100 max-h-60 overflow-auto">
+                {(!categories || categories.length === 0) && (
+                  <div className="py-4 text-center text-slate-400 text-sm">Belum ada kategori</div>
+                )}
+                {categories?.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between py-2 px-1 group">
+                    <div>
+                      <span className="text-sm font-medium text-slate-800">{c.name}</span>
+                      {c._count && (
+                        <span className="ml-2 text-xs text-slate-400">({c._count.products} produk)</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleDeleteCategory(c.id)}
+                      className="opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-50 p-1 rounded text-xs transition-opacity"
+                      title="Hapus"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">{label}</label>
+      {children}
     </div>
   );
 }
@@ -192,6 +380,15 @@ function EditIcon({ className = '' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </svg>
+  );
+}
+
+function TagIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z" />
+      <path d="M7 7h.01" />
     </svg>
   );
 }

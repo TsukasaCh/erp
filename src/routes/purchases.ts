@@ -10,6 +10,7 @@ const purchaseInput = z.object({
   poNo: z.string().nullable().optional(),
   orderedAt: z.coerce.date().optional(),
   supplier: z.string().nullable().optional(),
+  materialId: z.string().nullable().optional(),
   materialCode: z.string().nullable().optional(),
   materialName: z.string().nullable().optional(),
   quantity: z.coerce.number().min(0).default(1),
@@ -45,6 +46,11 @@ purchasesRouter.get('/', requirePermission('purchases:view'), async (req, res) =
   const [items, total] = await Promise.all([
     prisma.purchaseOrder.findMany({
       where,
+      include: {
+        material: {
+          select: { id: true, code: true, name: true, unit: true, stock: true },
+        },
+      },
       orderBy: { orderedAt: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -66,22 +72,100 @@ purchasesRouter.post('/batch', requirePermission('purchases:write'), async (req,
     if (!data.total || data.total === 0) {
       data.total = (data.quantity ?? 0) * (data.price ?? 0);
     }
+
+    // Auto-fill material details if materialId is set
+    if (data.materialId) {
+      const material = await prisma.material.findUnique({ where: { id: data.materialId } });
+      if (material) {
+        data.materialCode = material.code;
+        data.materialName = material.name;
+        if (!data.unit) data.unit = material.unit;
+        if (!data.supplier) data.supplier = material.supplier;
+        if (!data.price || data.price === 0) data.price = material.price;
+        data.total = (data.quantity ?? 0) * data.price;
+      }
+    }
+
     if (id && id.length > 0) {
       try {
+        const existing = await prisma.purchaseOrder.findUnique({ where: { id } });
         const updated = await prisma.purchaseOrder.update({ where: { id }, data });
+
+        // Handle stock adjustment when status changes to/from received
+        if (data.materialId && existing) {
+          const wasReceived = existing.status === 'received' && existing.stockAdjusted;
+          const isReceived = data.status === 'received';
+
+          if (!wasReceived && isReceived) {
+            // Newly received: add stock
+            await prisma.material.update({
+              where: { id: data.materialId },
+              data: { stock: { increment: data.quantity ?? 0 } },
+            });
+            await prisma.purchaseOrder.update({
+              where: { id },
+              data: { stockAdjusted: true },
+            });
+          } else if (wasReceived && !isReceived) {
+            // Reverted from received: remove stock
+            await prisma.material.update({
+              where: { id: data.materialId },
+              data: { stock: { decrement: existing.quantity } },
+            });
+            await prisma.purchaseOrder.update({
+              where: { id },
+              data: { stockAdjusted: false },
+            });
+          }
+        }
+
         saved.push(updated);
       } catch {
         const created = await prisma.purchaseOrder.create({ data });
+        // If created as received, add stock
+        if (data.materialId && data.status === 'received') {
+          await prisma.material.update({
+            where: { id: data.materialId },
+            data: { stock: { increment: data.quantity ?? 0 } },
+          });
+          await prisma.purchaseOrder.update({
+            where: { id: created.id },
+            data: { stockAdjusted: true },
+          });
+        }
         saved.push(created);
       }
     } else {
       const created = await prisma.purchaseOrder.create({ data });
+      // If created as received, add stock
+      if (data.materialId && data.status === 'received') {
+        await prisma.material.update({
+          where: { id: data.materialId },
+          data: { stock: { increment: data.quantity ?? 0 } },
+        });
+        await prisma.purchaseOrder.update({
+          where: { id: created.id },
+          data: { stockAdjusted: true },
+        });
+      }
       saved.push(created);
     }
   }
 
+  // Handle deletes: restore stock for received POs
   let deletedCount = 0;
   if (deletes.length > 0) {
+    const posToDelete = await prisma.purchaseOrder.findMany({
+      where: { id: { in: deletes } },
+    });
+    for (const po of posToDelete) {
+      if (po.materialId && po.stockAdjusted) {
+        await prisma.material.update({
+          where: { id: po.materialId },
+          data: { stock: { decrement: po.quantity } },
+        });
+      }
+    }
     const result = await prisma.purchaseOrder.deleteMany({ where: { id: { in: deletes } } });
     deletedCount = result.count;
   }
@@ -90,6 +174,13 @@ purchasesRouter.post('/batch', requirePermission('purchases:write'), async (req,
 });
 
 purchasesRouter.delete('/:id', requirePermission('purchases:write'), async (req, res) => {
+  const po = await prisma.purchaseOrder.findUnique({ where: { id: String(req.params.id) } });
+  if (po && po.materialId && po.stockAdjusted) {
+    await prisma.material.update({
+      where: { id: po.materialId },
+      data: { stock: { decrement: po.quantity } },
+    });
+  }
   await prisma.purchaseOrder.delete({ where: { id: String(req.params.id) } });
   res.json({ ok: true });
 });

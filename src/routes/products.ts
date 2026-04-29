@@ -9,7 +9,7 @@ const productInput = z.object({
   id: z.string().optional(),
   sku: z.string().min(1),
   name: z.string().min(1),
-  category: z.string().nullable().optional(),
+  categoryId: z.string().nullable().optional(),
   stock: z.coerce.number().int().min(0).default(0),
   price: z.coerce.number().min(0).default(0),
   note: z.string().nullable().optional(),
@@ -23,6 +23,9 @@ const batchSchema = z.object({
 productsRouter.get('/', requirePermission('products:view'), async (_req, res) => {
   const products = await prisma.product.findMany({
     orderBy: { updatedAt: 'desc' },
+    include: {
+      category: { select: { id: true, name: true } },
+    },
   });
   res.json(products);
 });

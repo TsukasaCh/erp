@@ -2,13 +2,24 @@
 import useSWR from 'swr';
 import { useMemo, useState } from 'react';
 import { fetcher, formatRupiah, postJSON } from '@/lib/api';
-import { SpreadsheetEditor, type ColumnDef } from '@/components/SpreadsheetEditor';
+import { SearchSelect, type SearchSelectOption } from '@/components/SearchSelect';
+
+interface Material {
+  id: string;
+  code: string;
+  name: string;
+  unit: string;
+  stock: number;
+  price: number;
+  supplier?: string | null;
+}
 
 interface PurchaseOrder {
   id?: string;
   poNo?: string | null;
   orderedAt?: string;
   supplier?: string | null;
+  materialId?: string | null;
   materialCode?: string | null;
   materialName?: string | null;
   quantity: number;
@@ -18,10 +29,7 @@ interface PurchaseOrder {
   status: string;
   expectedAt?: string | null;
   note?: string | null;
-  _localId?: string;
-  _dirty?: boolean;
-  _new?: boolean;
-  _deleted?: boolean;
+  material?: Material | null;
   [k: string]: unknown;
 }
 
@@ -37,42 +45,28 @@ const TABS: { key: string; label: string }[] = [
   { key: 'all', label: 'Semua' },
 ];
 
-const editorColumns: ColumnDef<PurchaseOrder>[] = [
-  { key: 'poNo', label: 'No. PO', type: 'text', width: 130 },
-  { key: 'orderedAt', label: 'Tanggal Order', type: 'datetime', width: 170 },
-  { key: 'supplier', label: 'Supplier', type: 'text', width: 180 },
-  { key: 'materialCode', label: 'Kode Bahan', type: 'text', width: 130 },
-  { key: 'materialName', label: 'Nama Bahan', type: 'text', width: 220 },
-  { key: 'quantity', label: 'Qty', type: 'number', width: 80, align: 'right' },
-  { key: 'unit', label: 'Satuan', type: 'select', options: UNITS, width: 90 },
-  { key: 'price', label: 'Harga', type: 'number', width: 130, align: 'right',
-    format: (v) => v == null ? '' : `Rp ${Number(v).toLocaleString('id-ID')}` },
-  { key: 'total', label: 'Total', type: 'readonly', width: 140, align: 'right',
-    format: (_v, row) => {
-      const t = Number(row.quantity ?? 0) * Number(row.price ?? 0);
-      return `Rp ${t.toLocaleString('id-ID')}`;
-    },
-    computed: (row) => Number(row.quantity ?? 0) * Number(row.price ?? 0),
-  },
-  { key: 'expectedAt', label: 'Target Terima', type: 'date', width: 150 },
-  { key: 'status', label: 'Status', type: 'select', options: STATUSES, width: 120 },
-  { key: 'note', label: 'Catatan', type: 'text', width: 200 },
-];
-
-type Mode =
-  | { kind: 'view' }
-  | { kind: 'edit'; focusId?: string; addNew?: boolean };
-
 export default function PurchaseOrdersPage() {
-  const [mode, setMode] = useState<Mode>({ kind: 'view' });
   const [status, setStatus] = useState<string>('pending');
   const [supplier, setSupplier] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
 
   const { data, error, isLoading, mutate } = useSWR<ListResponse>(
     `/api/purchase-orders?status=${status}&pageSize=500`,
     fetcher,
   );
+
+  const { data: materials } = useSWR<Material[]>('/api/materials', fetcher);
+
+  const materialOptions: SearchSelectOption[] = useMemo(() => {
+    if (!materials) return [];
+    return materials.map((m) => ({
+      value: m.id,
+      label: `${m.code} - ${m.name} (Stok: ${m.stock} ${m.unit})`,
+      data: m as unknown as Record<string, unknown>,
+    }));
+  }, [materials]);
 
   const supplierCounts = useMemo(() => {
     if (!data) return new Map<string, number>();
@@ -103,49 +97,67 @@ export default function PurchaseOrdersPage() {
   if (error) return <div className="text-red-600">Error: {String(error)}</div>;
   if (isLoading || !data) return <div className="text-slate-500">Loading…</div>;
 
-  if (mode.kind === 'edit') {
-    return (
-      <div className="flex flex-col h-[calc(100vh-4rem)]">
-        <header className="mb-4">
-          <h1 className="text-2xl font-bold">
-            {mode.addNew ? 'Tambah Pembelian PO' : 'Edit Pembelian PO'}
-          </h1>
-          <p className="text-sm text-slate-500">
-            Double-click sel untuk edit. Ctrl+S simpan · Ctrl+Z undo · Del hapus baris.
-          </p>
-        </header>
-        <div className="flex-1 min-h-0">
-          <SpreadsheetEditor<PurchaseOrder>
-            columns={editorColumns}
-            initialRows={data.items}
-            autoAddRow={mode.addNew}
-            focusRowId={mode.focusId}
-            onClose={() => setMode({ kind: 'view' })}
-            onRowTemplate={() => ({
-              poNo: '',
-              orderedAt: new Date().toISOString(),
-              supplier: '',
-              materialCode: '',
-              materialName: '',
-              quantity: 1,
-              unit: 'pcs',
-              price: 0,
-              total: 0,
-              status: 'pending',
-              expectedAt: null,
-              note: null,
-            })}
-            onSave={async ({ upserts, deletes }) => {
-              await postJSON('/api/purchase-orders/batch', { upserts, deletes });
-              await mutate();
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
-
   const totalValue = filtered.reduce((s, p) => s + Number(p.total ?? 0), 0);
+
+  const handleNew = () => {
+    setEditingPO({
+      poNo: '',
+      orderedAt: new Date().toISOString(),
+      supplier: '',
+      materialId: null,
+      materialCode: '',
+      materialName: '',
+      quantity: 1,
+      unit: 'pcs',
+      price: 0,
+      total: 0,
+      status: 'pending',
+      expectedAt: null,
+      note: null,
+    });
+    setShowForm(true);
+  };
+
+  const handleEdit = (po: PurchaseOrder) => {
+    setEditingPO({ ...po });
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
+    if (!editingPO) return;
+    const payload = {
+      upserts: [{
+        id: editingPO.id,
+        poNo: editingPO.poNo,
+        orderedAt: editingPO.orderedAt,
+        supplier: editingPO.supplier,
+        materialId: editingPO.materialId,
+        materialCode: editingPO.materialCode,
+        materialName: editingPO.materialName,
+        quantity: Number(editingPO.quantity ?? 1),
+        unit: editingPO.unit,
+        price: Number(editingPO.price ?? 0),
+        total: Number(editingPO.quantity ?? 1) * Number(editingPO.price ?? 0),
+        status: editingPO.status ?? 'pending',
+        expectedAt: editingPO.expectedAt,
+        note: editingPO.note,
+      }],
+      deletes: [] as string[],
+    };
+    await postJSON('/api/purchase-orders/batch', payload);
+    await mutate();
+    setShowForm(false);
+    setEditingPO(null);
+  };
+
+  const handleDelete = async () => {
+    if (!editingPO?.id) return;
+    if (!confirm('Hapus PO ini?')) return;
+    await postJSON('/api/purchase-orders/batch', { upserts: [], deletes: [editingPO.id] });
+    await mutate();
+    setShowForm(false);
+    setEditingPO(null);
+  };
 
   return (
     <div className="space-y-5">
@@ -162,13 +174,7 @@ export default function PurchaseOrdersPage() {
             className="border rounded px-3 py-1.5 bg-white text-sm w-64"
           />
           <button
-            onClick={() => setMode({ kind: 'edit' })}
-            className="px-3 py-1.5 border border-slate-300 rounded text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5"
-          >
-            <EditIcon className="w-4 h-4" /> Edit
-          </button>
-          <button
-            onClick={() => setMode({ kind: 'edit', addNew: true })}
+            onClick={handleNew}
             className="px-4 py-1.5 bg-slate-900 text-white rounded text-sm font-semibold hover:bg-slate-700"
           >
             + Tambah PO
@@ -250,7 +256,7 @@ export default function PurchaseOrdersPage() {
                 </td>
                 <td className="px-2 py-3">
                   <button
-                    onClick={() => setMode({ kind: 'edit', focusId: p.id })}
+                    onClick={() => handleEdit(p)}
                     className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-slate-200 rounded transition-opacity"
                     title="Edit"
                   >
@@ -262,6 +268,199 @@ export default function PurchaseOrdersPage() {
           </tbody>
         </table>
       </div>
+
+      {/* PO Form Modal */}
+      {showForm && editingPO && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 p-4"
+          onClick={() => { setShowForm(false); setEditingPO(null); }}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="font-semibold">{editingPO.id ? 'Edit Pembelian PO' : 'Tambah Pembelian PO'}</h3>
+              <button onClick={() => { setShowForm(false); setEditingPO(null); }} className="text-slate-400 hover:text-slate-600 text-xl leading-none">×</button>
+            </div>
+            <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="No. PO">
+                  <input
+                    value={editingPO.poNo ?? ''}
+                    onChange={(e) => setEditingPO((p) => ({ ...p!, poNo: e.target.value }))}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                  />
+                </Field>
+                <Field label="Tanggal Order">
+                  <input
+                    type="datetime-local"
+                    value={editingPO.orderedAt ? toLocalInput(editingPO.orderedAt) : ''}
+                    onChange={(e) => setEditingPO((p) => ({ ...p!, orderedAt: new Date(e.target.value).toISOString() }))}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                  />
+                </Field>
+              </div>
+
+              <Field label="Bahan (dari Master Data Bahan)">
+                <SearchSelect
+                  options={materialOptions}
+                  value={editingPO.materialId}
+                  onChange={(val, opt) => {
+                    if (opt && opt.data) {
+                      const mat = opt.data as unknown as Material;
+                      setEditingPO((p) => ({
+                        ...p!,
+                        materialId: val,
+                        materialCode: mat.code,
+                        materialName: mat.name,
+                        unit: mat.unit,
+                        supplier: mat.supplier ?? p?.supplier ?? '',
+                        price: mat.price,
+                        total: (p?.quantity ?? 1) * mat.price,
+                      }));
+                    } else {
+                      setEditingPO((p) => ({
+                        ...p!,
+                        materialId: null,
+                        materialCode: '',
+                        materialName: '',
+                      }));
+                    }
+                  }}
+                  placeholder="Pilih bahan dari master data..."
+                />
+              </Field>
+
+              <Field label="Supplier">
+                <input
+                  value={editingPO.supplier ?? ''}
+                  onChange={(e) => setEditingPO((p) => ({ ...p!, supplier: e.target.value }))}
+                  className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                />
+              </Field>
+
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Qty">
+                  <input
+                    type="number"
+                    min={1}
+                    value={editingPO.quantity ?? 1}
+                    onChange={(e) => {
+                      const qty = Number(e.target.value) || 1;
+                      setEditingPO((p) => ({
+                        ...p!,
+                        quantity: qty,
+                        total: qty * Number(p?.price ?? 0),
+                      }));
+                    }}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                  />
+                </Field>
+                <Field label="Satuan">
+                  <select
+                    value={editingPO.unit ?? 'pcs'}
+                    onChange={(e) => setEditingPO((p) => ({ ...p!, unit: e.target.value }))}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white"
+                  >
+                    {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </Field>
+                <Field label="Harga per Unit">
+                  <input
+                    type="number"
+                    min={0}
+                    value={editingPO.price ?? 0}
+                    onChange={(e) => {
+                      const price = Number(e.target.value) || 0;
+                      setEditingPO((p) => ({
+                        ...p!,
+                        price,
+                        total: Number(p?.quantity ?? 1) * price,
+                      }));
+                    }}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                  />
+                </Field>
+              </div>
+
+              <Field label="Total">
+                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm font-medium text-slate-700">
+                  {formatRupiah(Number(editingPO.quantity ?? 1) * Number(editingPO.price ?? 0))}
+                </div>
+              </Field>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Status">
+                  <select
+                    value={editingPO.status ?? 'pending'}
+                    onChange={(e) => setEditingPO((p) => ({ ...p!, status: e.target.value }))}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white"
+                  >
+                    <option value="pending">Menunggu</option>
+                    <option value="received">Diterima</option>
+                    <option value="cancelled">Batal</option>
+                  </select>
+                  {editingPO.status === 'received' && (
+                    <div className="mt-1 text-xs text-emerald-600 font-medium">
+                      ✓ Stok bahan akan otomatis bertambah
+                    </div>
+                  )}
+                </Field>
+                <Field label="Target Terima">
+                  <input
+                    type="date"
+                    value={editingPO.expectedAt ? String(editingPO.expectedAt).slice(0, 10) : ''}
+                    onChange={(e) => setEditingPO((p) => ({ ...p!, expectedAt: e.target.value || null }))}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                  />
+                </Field>
+              </div>
+
+              <Field label="Catatan">
+                <textarea
+                  rows={2}
+                  value={editingPO.note ?? ''}
+                  onChange={(e) => setEditingPO((p) => ({ ...p!, note: e.target.value }))}
+                  className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                />
+              </Field>
+            </div>
+            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div>
+                {editingPO.id && (
+                  <button onClick={handleDelete} className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded">
+                    Hapus
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setShowForm(false); setEditingPO(null); }}
+                  className="px-3 py-1.5 text-sm border border-slate-300 rounded hover:bg-white"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="px-4 py-1.5 text-sm bg-slate-900 text-white rounded font-semibold hover:bg-slate-700"
+                >
+                  Simpan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">{label}</label>
+      {children}
     </div>
   );
 }
@@ -300,4 +499,10 @@ function EditIcon({ className = '' }: { className?: string }) {
       <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
     </svg>
   );
+}
+
+function toLocalInput(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

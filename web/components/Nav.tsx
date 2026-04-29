@@ -42,7 +42,16 @@ const NAV: NavItem[] = [
   { kind: 'link', href: '/production', label: 'Kalender Produksi', icon: IconCalendar, permission: 'production:view' },
   { kind: 'link', href: '/hpp', label: 'Kalkulator HPP', icon: IconCalc, permission: 'hpp:view' },
   { kind: 'link', href: '/products', label: 'Inventory', icon: IconProducts, permission: 'products:view' },
-  { kind: 'link', href: '/materials', label: 'Master Data Bahan', icon: IconBox, permission: 'materials:view' },
+  {
+    kind: 'group',
+    id: 'bahan',
+    label: 'Bahan Baku',
+    icon: IconBox,
+    children: [
+      { kind: 'link', href: '/materials', label: 'Master Data Bahan', permission: 'materials:view' },
+      { kind: 'link', href: '/material-usage', label: 'Penggunaan Bahan', permission: 'materials:view' },
+    ],
+  },
   {
     kind: 'group',
     id: 'hrd',

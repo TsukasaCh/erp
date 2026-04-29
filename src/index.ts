@@ -13,6 +13,8 @@ import { rolesRouter } from './routes/roles';
 import { employeesRouter } from './routes/employees';
 import { attendanceRouter } from './routes/attendance';
 import { payrollRouter } from './routes/payroll';
+import { productCategoriesRouter } from './routes/product-categories';
+import { materialUsageRouter } from './routes/material-usage';
 import { requireAuth } from './middleware/auth';
 
 const app = express();
@@ -25,17 +27,19 @@ app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 app.use('/api/auth', authRouter);
 
 // Protected: require JWT. Finer-grained permission checks live inside each router.
-app.use('/api/dashboard',       requireAuth, dashboardRouter);
-app.use('/api/orders',          requireAuth, ordersRouter);
-app.use('/api/products',        requireAuth, productsRouter);
-app.use('/api/materials',       requireAuth, materialsRouter);
-app.use('/api/purchase-orders', requireAuth, purchasesRouter);
-app.use('/api/production',      requireAuth, productionRouter);
-app.use('/api/employees',       requireAuth, employeesRouter);
-app.use('/api/attendance',      requireAuth, attendanceRouter);
-app.use('/api/payroll',         requireAuth, payrollRouter);
-app.use('/api/users',           usersRouter);
-app.use('/api/roles',           rolesRouter);
+app.use('/api/dashboard',          requireAuth, dashboardRouter);
+app.use('/api/orders',             requireAuth, ordersRouter);
+app.use('/api/products',           requireAuth, productsRouter);
+app.use('/api/product-categories', requireAuth, productCategoriesRouter);
+app.use('/api/materials',          requireAuth, materialsRouter);
+app.use('/api/material-usage',     requireAuth, materialUsageRouter);
+app.use('/api/purchase-orders',    requireAuth, purchasesRouter);
+app.use('/api/production',         requireAuth, productionRouter);
+app.use('/api/employees',          requireAuth, employeesRouter);
+app.use('/api/attendance',         requireAuth, attendanceRouter);
+app.use('/api/payroll',            requireAuth, payrollRouter);
+app.use('/api/users',              usersRouter);
+app.use('/api/roles',              rolesRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[api] error:', err);

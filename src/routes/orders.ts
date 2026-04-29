@@ -11,6 +11,7 @@ const orderInput = z.object({
   orderedAt: z.coerce.date().optional(),
   platform: z.string().nullable().optional(),
   buyer: z.string().nullable().optional(),
+  productId: z.string().nullable().optional(),
   sku: z.string().nullable().optional(),
   productName: z.string().nullable().optional(),
   quantity: z.coerce.number().int().min(0).default(1),
@@ -44,6 +45,11 @@ ordersRouter.get('/', requirePermission('orders:view'), async (req, res) => {
   const [items, total] = await Promise.all([
     prisma.order.findMany({
       where,
+      include: {
+        product: {
+          select: { id: true, sku: true, name: true, stock: true, price: true },
+        },
+      },
       orderBy: { orderedAt: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -60,36 +66,121 @@ ordersRouter.post('/batch', requirePermission('orders:write'), async (req, res) 
   const { upserts, deletes } = parsed.data;
 
   const saved = [];
+  const errors: string[] = [];
+
   for (const o of upserts) {
     const { id, ...data } = o;
     // auto-compute total if not supplied properly
     if (!data.total || data.total === 0) {
       data.total = (data.quantity ?? 0) * (data.price ?? 0);
     }
+
+    // If productId is set, auto-fill sku/productName from product and validate stock
+    if (data.productId) {
+      const product = await prisma.product.findUnique({ where: { id: data.productId } });
+      if (product) {
+        data.sku = product.sku;
+        data.productName = product.name;
+        if (!data.price || data.price === 0) data.price = product.price;
+        data.total = (data.quantity ?? 0) * data.price;
+      }
+    }
+
     if (id && id.length > 0) {
+      // UPDATE: get the existing order to calculate stock difference
       try {
+        const existing = await prisma.order.findUnique({ where: { id } });
         const updated = await prisma.order.update({ where: { id }, data });
+
+        // Adjust stock: restore old qty, deduct new qty (only for active orders)
+        if (data.productId && existing) {
+          const oldQty = (existing.status !== 'cancelled') ? existing.quantity : 0;
+          const newQty = (data.status !== 'cancelled') ? (data.quantity ?? 0) : 0;
+          const diff = newQty - oldQty;
+          if (diff !== 0) {
+            // Check stock for increases
+            if (diff > 0) {
+              const product = await prisma.product.findUnique({ where: { id: data.productId } });
+              if (product && product.stock < diff) {
+                errors.push(`Stok ${product.name} tidak cukup (sisa: ${product.stock}, butuh tambahan: ${diff})`);
+                saved.push(updated);
+                continue;
+              }
+            }
+            await prisma.product.update({
+              where: { id: data.productId },
+              data: { stock: { decrement: diff } },
+            });
+          }
+        }
+
         saved.push(updated);
       } catch {
         const created = await prisma.order.create({ data });
+        // Deduct stock for new order
+        if (data.productId && data.status !== 'cancelled') {
+          const product = await prisma.product.findUnique({ where: { id: data.productId } });
+          if (product && product.stock >= (data.quantity ?? 0)) {
+            await prisma.product.update({
+              where: { id: data.productId },
+              data: { stock: { decrement: data.quantity ?? 0 } },
+            });
+          } else if (product) {
+            errors.push(`Stok ${product.name} tidak cukup (sisa: ${product.stock})`);
+          }
+        }
         saved.push(created);
       }
     } else {
+      // CREATE: validate stock and deduct
+      if (data.productId && data.status !== 'cancelled') {
+        const product = await prisma.product.findUnique({ where: { id: data.productId } });
+        if (product && product.stock < (data.quantity ?? 0)) {
+          errors.push(`Stok ${product.name} tidak cukup (sisa: ${product.stock}, dibutuhkan: ${data.quantity})`);
+          // Still create the order but warn
+        }
+        if (product) {
+          await prisma.product.update({
+            where: { id: data.productId },
+            data: { stock: { decrement: Math.min(data.quantity ?? 0, product.stock) } },
+          });
+        }
+      }
       const created = await prisma.order.create({ data });
       saved.push(created);
     }
   }
 
+  // Handle deletes: restore stock for non-cancelled orders
   let deletedCount = 0;
   if (deletes.length > 0) {
+    // Get orders before deleting to restore stock
+    const ordersToDelete = await prisma.order.findMany({
+      where: { id: { in: deletes } },
+    });
+    for (const order of ordersToDelete) {
+      if (order.productId && order.status !== 'cancelled') {
+        await prisma.product.update({
+          where: { id: order.productId },
+          data: { stock: { increment: order.quantity } },
+        });
+      }
+    }
     const result = await prisma.order.deleteMany({ where: { id: { in: deletes } } });
     deletedCount = result.count;
   }
 
-  res.json({ saved, deleted: deletedCount });
+  res.json({ saved, deleted: deletedCount, errors: errors.length > 0 ? errors : undefined });
 });
 
 ordersRouter.delete('/:id', requirePermission('orders:write'), async (req, res) => {
+  const order = await prisma.order.findUnique({ where: { id: String(req.params.id) } });
+  if (order && order.productId && order.status !== 'cancelled') {
+    await prisma.product.update({
+      where: { id: order.productId },
+      data: { stock: { increment: order.quantity } },
+    });
+  }
   await prisma.order.delete({ where: { id: String(req.params.id) } });
   res.json({ ok: true });
 });

@@ -14,7 +14,19 @@
       "Bash(netstat -ano)",
       "Bash(taskkill //PID 2404 //F)",
       "Bash(docker --version)",
-      "Bash(docker compose *)"
+      "Bash(docker compose *)",
+      "Bash(taskkill //PID 16592 //F)",
+      "Bash(curl -s -o /dev/null -w \"web: %{http_code}\\\\n\" http://localhost:3001)",
+      "Bash(npx tsc *)",
+      "Bash(npx next *)",
+      "Bash(sqlite3 prisma/dev.db \".tables\")",
+      "Bash(node -e \"const Database = require\\('better-sqlite3'\\); const db = new Database\\('prisma/dev.db'\\); console.log\\(db.prepare\\(\\\\\"SELECT name FROM sqlite_master WHERE type='table'\\\\\"\\).all\\(\\)\\);\")",
+      "Bash(node -e \"const sqlite3 = require\\('sqlite3'\\); const db = new sqlite3.Database\\('prisma/dev.db'\\); db.all\\(\\\\\"SELECT name FROM sqlite_master WHERE type='table'\\\\\", \\(e,r\\) => console.log\\(e || r\\)\\)\")",
+      "Bash(echo \"backend exit=$?\")",
+      "Bash(echo \"web exit=$?\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }
