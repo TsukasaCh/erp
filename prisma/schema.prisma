@@ -229,3 +229,18 @@ model ProductionSchedule {
   @@index([scheduledAt])
   @@index([status])
 }
+
+// Catatan Aktivitas (Audit Log)
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  username  String
+  action    String   // POST, PUT, DELETE
+  resource  String   // URL endpoint atau nama modul
+  details   String?  // JSON string
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}

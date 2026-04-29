@@ -26,18 +26,45 @@ app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 // Public (no auth)
 app.use('/api/auth', authRouter);
 
+import { auditRouter } from './routes/audit';
+import { prisma } from './db/client';
+
+const auditLogger = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    const originalSend = res.send;
+    res.send = function (body) {
+      if (res.statusCode >= 200 && res.statusCode < 300 && req.auth) {
+        prisma.auditLog.create({
+          data: {
+            userId: req.auth.userId,
+            username: req.auth.username,
+            action: req.method,
+            resource: req.originalUrl,
+            details: JSON.stringify(req.body)
+          }
+        }).catch(err => console.error('[audit] error:', err));
+      }
+      return originalSend.apply(res, arguments as any);
+    };
+  }
+  next();
+};
+
 // Protected: require JWT. Finer-grained permission checks live inside each router.
-app.use('/api/dashboard',          requireAuth, dashboardRouter);
-app.use('/api/orders',             requireAuth, ordersRouter);
-app.use('/api/products',           requireAuth, productsRouter);
-app.use('/api/product-categories', requireAuth, productCategoriesRouter);
-app.use('/api/materials',          requireAuth, materialsRouter);
-app.use('/api/material-usage',     requireAuth, materialUsageRouter);
-app.use('/api/purchase-orders',    requireAuth, purchasesRouter);
-app.use('/api/production',         requireAuth, productionRouter);
-app.use('/api/employees',          requireAuth, employeesRouter);
-app.use('/api/attendance',         requireAuth, attendanceRouter);
-app.use('/api/payroll',            requireAuth, payrollRouter);
+const protectedMw = [requireAuth, auditLogger];
+
+app.use('/api/dashboard',          protectedMw, dashboardRouter);
+app.use('/api/orders',             protectedMw, ordersRouter);
+app.use('/api/products',           protectedMw, productsRouter);
+app.use('/api/product-categories', protectedMw, productCategoriesRouter);
+app.use('/api/materials',          protectedMw, materialsRouter);
+app.use('/api/material-usage',     protectedMw, materialUsageRouter);
+app.use('/api/purchase-orders',    protectedMw, purchasesRouter);
+app.use('/api/production',         protectedMw, productionRouter);
+app.use('/api/employees',          protectedMw, employeesRouter);
+app.use('/api/attendance',         protectedMw, attendanceRouter);
+app.use('/api/payroll',            protectedMw, payrollRouter);
+app.use('/api/audit-logs',         protectedMw, auditRouter);
 app.use('/api/users',              usersRouter);
 app.use('/api/roles',              rolesRouter);
 

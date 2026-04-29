@@ -62,6 +62,7 @@ const NAV: NavItem[] = [
       { kind: 'link', href: '/hrd/penggajian', label: 'Penggajian', permission: 'hrd:view' },
     ],
   },
+  { kind: 'link', href: '/audit-logs', label: 'Audit Log', icon: IconDot, superAdminOnly: true },
   { kind: 'link', href: '/users', label: 'Users & Roles', icon: IconUsers, permission: 'users:manage' },
 ];
 
