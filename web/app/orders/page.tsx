@@ -35,6 +35,7 @@ interface ListResponse { page: number; pageSize: number; total: number; items: O
 
 const PLATFORMS = ['Shopee', 'TikTok', 'Tokopedia', 'Offline', 'WhatsApp', 'Instagram', 'Lainnya'];
 const STATUSES = [
+  { label: 'Pre-Order', value: 'pre_order' },
   { label: 'Perlu Dikirim', value: 'to_ship' },
   { label: 'Dikirim', value: 'shipped' },
   { label: 'Selesai', value: 'completed' },
@@ -42,6 +43,7 @@ const STATUSES = [
 ];
 
 const TABS: { key: string; label: string }[] = [
+  { key: 'pre_order', label: 'Pre-Order' },
   { key: 'to_ship', label: 'Perlu Dikirim' },
   { key: 'shipped', label: 'Dikirim' },
   { key: 'completed', label: 'Selesai' },
@@ -379,12 +381,14 @@ function PlatformChip({ label, active, onClick, count, color }: {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
+    pre_order: 'bg-purple-100 text-purple-800',
     to_ship: 'bg-amber-100 text-amber-800',
     shipped: 'bg-blue-100 text-blue-800',
     completed: 'bg-emerald-100 text-emerald-800',
     cancelled: 'bg-red-100 text-red-800',
   };
   const label: Record<string, string> = {
+    pre_order: 'pre-order',
     to_ship: 'perlu dikirim',
     shipped: 'dikirim',
     completed: 'selesai',
