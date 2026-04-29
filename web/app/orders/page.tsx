@@ -80,7 +80,13 @@ export default function OrdersPage() {
       options: PLATFORMS,
     },
     { key: 'buyer', label: 'Pembeli', type: 'text', width: 160 },
-    { key: 'sku', label: 'SKU', type: 'text', width: 130 },
+    { 
+      key: 'sku', 
+      label: 'SKU', 
+      type: 'select', 
+      width: 130,
+      options: materials?.map(m => ({ value: m.code, label: m.code })) ?? [],
+    },
     { 
       key: 'productName', 
       label: 'Produk (dari Bahan)', 
