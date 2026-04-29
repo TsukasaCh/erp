@@ -54,33 +54,6 @@ const TABS: { key: string; label: string }[] = [
 type SortKey = 'orderNo' | 'orderedAt' | 'platform' | 'buyer' | 'productName' | 'quantity' | 'total' | 'status';
 type SortDir = 'asc' | 'desc';
 
-const columns: ColumnDef<Order>[] = [
-  { key: 'orderNo', label: 'No. Order', type: 'text', width: 140 },
-  { key: 'orderedAt', label: 'Tanggal', type: 'datetime', width: 170 },
-  {
-    key: 'platform', label: 'Platform', type: 'select', width: 120,
-    options: PLATFORMS,
-  },
-  { key: 'buyer', label: 'Pembeli', type: 'text', width: 160 },
-  { key: 'sku', label: 'SKU', type: 'text', width: 130 },
-  { key: 'productName', label: 'Produk', type: 'text', width: 200 },
-  { key: 'quantity', label: 'Qty', type: 'number', width: 70, align: 'right' },
-  {
-    key: 'price', label: 'Harga', type: 'number', width: 120, align: 'right',
-    format: (v) => formatRupiah(Number(v ?? 0)),
-  },
-  {
-    key: 'total', label: 'Total', type: 'readonly', width: 130, align: 'right',
-    format: (_v, row) => {
-      const t = Number(row.quantity ?? 0) * Number(row.price ?? 0);
-      return formatRupiah(t);
-    },
-    computed: (row) => Number(row.quantity ?? 0) * Number(row.price ?? 0),
-  },
-  { key: 'status', label: 'Status', type: 'select', options: STATUSES, width: 120 },
-  { key: 'note', label: 'Catatan', type: 'text', width: 200 },
-];
-
 type Mode =
   | { kind: 'view' }
   | { kind: 'edit'; focusId?: string; addNew?: boolean };
@@ -96,6 +69,41 @@ export default function OrdersPage() {
     `/api/orders?status=${status}&pageSize=500`,
     fetcher,
   );
+
+  const { data: materials } = useSWR<any[]>('/api/materials', fetcher);
+
+  const columns: ColumnDef<Order>[] = useMemo(() => [
+    { key: 'orderNo', label: 'No. Order', type: 'text', width: 140 },
+    { key: 'orderedAt', label: 'Tanggal', type: 'datetime', width: 170 },
+    {
+      key: 'platform', label: 'Platform', type: 'select', width: 120,
+      options: PLATFORMS,
+    },
+    { key: 'buyer', label: 'Pembeli', type: 'text', width: 160 },
+    { key: 'sku', label: 'SKU', type: 'text', width: 130 },
+    { 
+      key: 'productName', 
+      label: 'Produk (dari Bahan)', 
+      type: 'select', 
+      width: 250,
+      options: materials?.map(m => ({ value: m.name, label: m.name })) ?? [],
+    },
+    { key: 'quantity', label: 'Qty', type: 'number', width: 70, align: 'right' },
+    {
+      key: 'price', label: 'Harga', type: 'number', width: 120, align: 'right',
+      format: (v) => formatRupiah(Number(v ?? 0)),
+    },
+    {
+      key: 'total', label: 'Total', type: 'readonly', width: 130, align: 'right',
+      format: (_v, row) => {
+        const t = Number(row.quantity ?? 0) * Number(row.price ?? 0);
+        return formatRupiah(t);
+      },
+      computed: (row) => Number(row.quantity ?? 0) * Number(row.price ?? 0),
+    },
+    { key: 'status', label: 'Status', type: 'select', options: STATUSES, width: 120 },
+    { key: 'note', label: 'Catatan', type: 'text', width: 200 },
+  ], [materials]);
 
   // Platform counts
   const platformCounts = useMemo(() => {
