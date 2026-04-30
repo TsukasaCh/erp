@@ -22,20 +22,13 @@ interface Material {
   [k: string]: unknown;
 }
 
+interface Supplier {
+  id: string;
+  storeName: string;
+}
+
 const CATEGORIES = ['Aluminium', 'Kaca', 'Handle', 'Karet Seal', 'Sekrup', 'Engsel', 'Roller', 'Aksesoris', 'Lainnya'];
 const UNITS = ['pcs', 'batang', 'kg', 'm', 'm²', 'lembar', 'roll', 'box', 'set'];
-
-const columns: ColumnDef<Material>[] = [
-  { key: 'code', label: 'Kode', type: 'text', width: 140 },
-  { key: 'name', label: 'Nama Bahan', type: 'text', width: 260 },
-  { key: 'category', label: 'Kategori', type: 'select', options: CATEGORIES, width: 140 },
-  { key: 'unit', label: 'Satuan', type: 'select', options: UNITS, width: 100 },
-  { key: 'stock', label: 'Stok', type: 'number', width: 90, align: 'right' },
-  { key: 'price', label: 'Harga Beli', type: 'number', width: 140, align: 'right',
-    format: (v) => v == null ? '' : `Rp ${Number(v).toLocaleString('id-ID')}` },
-  { key: 'supplier', label: 'Supplier', type: 'text', width: 180 },
-  { key: 'note', label: 'Catatan', type: 'text', width: 200 },
-];
 
 type Mode =
   | { kind: 'view' }
@@ -46,6 +39,28 @@ export default function MaterialsPage() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string>('all');
   const { data, error, isLoading, mutate } = useSWR<Material[]>('/api/materials', fetcher);
+  const { data: suppliers } = useSWR<Supplier[]>('/api/suppliers', fetcher);
+
+  // Editor columns: NO stock here — stock dikelola di Inventory.
+  // Master Data Bahan = template/katalog bahan baku (kode, nama, satuan, harga, supplier).
+  const columns: ColumnDef<Material>[] = [
+    { key: 'code', label: 'Kode', type: 'text', width: 140 },
+    { key: 'name', label: 'Nama Bahan', type: 'text', width: 260 },
+    { key: 'category', label: 'Kategori', type: 'select', options: CATEGORIES, width: 140 },
+    { key: 'unit', label: 'Satuan', type: 'select', options: UNITS, width: 100 },
+    {
+      key: 'price', label: 'Harga Beli', type: 'number', width: 140, align: 'right',
+      format: (v) => v == null ? '' : `Rp ${Number(v).toLocaleString('id-ID')}`,
+    },
+    {
+      key: 'supplier',
+      label: 'Supplier Default',
+      type: 'select',
+      width: 200,
+      options: suppliers?.map((s) => s.storeName) ?? [],
+    },
+    { key: 'note', label: 'Catatan', type: 'text', width: 240 },
+  ];
 
   if (error) return <div className="text-red-600">Error: {String(error)}</div>;
   if (isLoading || !data) return <div className="text-slate-500">Loading…</div>;
@@ -58,7 +73,7 @@ export default function MaterialsPage() {
             {mode.addNew ? 'Tambah Bahan Baku' : 'Edit Master Bahan'}
           </h1>
           <p className="text-sm text-slate-500">
-            Double-click sel untuk edit. Ctrl+S simpan · Ctrl+Z undo · Del hapus baris.
+            Master Data Bahan = template/katalog. Stok dikelola di halaman <span className="font-medium">Inventory</span>.
           </p>
         </header>
 
@@ -74,7 +89,7 @@ export default function MaterialsPage() {
               name: '',
               category: null,
               unit: 'pcs',
-              stock: 0,
+              stock: 0, // tetap dikirim sebagai 0; tidak diedit user
               price: 0,
               supplier: null,
               note: null,
@@ -98,14 +113,15 @@ export default function MaterialsPage() {
     return true;
   });
 
-  const totalValue = filtered.reduce((sum, m) => sum + Number(m.stock) * Number(m.price), 0);
-
   return (
     <div className="space-y-6">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Master Data Bahan</h1>
-          <p className="text-sm text-slate-500 mt-1">Bahan baku untuk produksi aluminium.</p>
+          <p className="text-sm text-slate-500 mt-1">
+            Katalog/template bahan baku. Stok aktual dilacak di halaman{' '}
+            <a href="/material-usage" className="text-teal-600 hover:underline font-medium">Inventory</a>.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -144,16 +160,15 @@ export default function MaterialsPage() {
               <th className="px-4 py-3 font-medium">Kode</th>
               <th className="px-4 py-3 font-medium">Nama</th>
               <th className="px-4 py-3 font-medium">Kategori</th>
-              <th className="px-4 py-3 font-medium text-right">Stok</th>
               <th className="px-4 py-3 font-medium">Satuan</th>
               <th className="px-4 py-3 font-medium text-right">Harga Beli</th>
-              <th className="px-4 py-3 font-medium">Supplier</th>
+              <th className="px-4 py-3 font-medium">Supplier Default</th>
               <th className="px-4 py-3 w-10" />
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+              <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-400">
                 {data.length === 0 ? 'Belum ada bahan. Klik "+ Tambah Bahan" untuk mulai.' : 'Tidak ada hasil.'}
               </td></tr>
             )}
@@ -165,9 +180,6 @@ export default function MaterialsPage() {
                   {m.category ? (
                     <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs">{m.category}</span>
                   ) : <span className="text-slate-400">-</span>}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <StockBadge stock={Number(m.stock)} />
                 </td>
                 <td className="px-4 py-3 text-xs text-slate-500">{m.unit}</td>
                 <td className="px-4 py-3 text-right">{formatRupiah(Number(m.price))}</td>
@@ -189,18 +201,12 @@ export default function MaterialsPage() {
 
       <div className="flex items-center justify-between text-xs text-slate-500">
         <span>Menampilkan {filtered.length} dari {data.length} bahan</span>
-        <span>
-          Total nilai stok: <span className="font-semibold text-slate-700">{formatRupiah(totalValue)}</span>
-        </span>
+        <a href="/material-usage" className="text-teal-600 hover:underline font-medium">
+          Lihat stok aktual di Inventory →
+        </a>
       </div>
     </div>
   );
-}
-
-function StockBadge({ stock }: { stock: number }) {
-  if (stock === 0) return <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 text-xs font-semibold">Habis</span>;
-  if (stock <= 10) return <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-xs font-semibold">{stock}</span>;
-  return <span className="font-medium">{stock}</span>;
 }
 
 function EditIcon({ className = '' }: { className?: string }) {

@@ -65,3 +65,29 @@ materialsRouter.delete('/:id', requirePermission('materials:write'), async (req,
   await prisma.material.delete({ where: { id: String(req.params.id) } });
   res.json({ ok: true });
 });
+
+// Stock-only adjustment (Penyesuaian Stok). Used by Inventory page for
+// opening balance or manual corrections. Reason is captured in body and
+// logged via the global audit middleware.
+const stockAdjustSchema = z.object({
+  stock: z.coerce.number().min(0),
+  reason: z.string().min(1).max(200).optional(),
+});
+
+materialsRouter.patch('/:id/stock', requirePermission('materials:write'), async (req, res) => {
+  const parsed = stockAdjustSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const id = String(req.params.id);
+  const existing = await prisma.material.findUnique({ where: { id } });
+  if (!existing) return res.status(404).json({ error: 'not_found' });
+
+  const updated = await prisma.material.update({
+    where: { id },
+    data: { stock: parsed.data.stock },
+  });
+  res.json({
+    ...updated,
+    _delta: parsed.data.stock - existing.stock,
+    _reason: parsed.data.reason ?? null,
+  });
+});
