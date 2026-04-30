@@ -14,6 +14,13 @@ interface Material {
   supplier?: string | null;
 }
 
+interface Supplier {
+  id: string;
+  storeName: string;
+  picName?: string | null;
+  phone?: string | null;
+}
+
 interface PurchaseOrder extends SpreadsheetRow {
   id?: string;
   poNo?: string | null;
@@ -68,12 +75,19 @@ export default function PurchaseOrdersPage() {
   );
 
   const { data: materials } = useSWR<Material[]>('/api/materials', fetcher);
+  const { data: suppliers } = useSWR<Supplier[]>('/api/suppliers', fetcher);
 
   const editorColumns: ColumnDef<PurchaseOrder>[] = useMemo(() => {
     return [
       { key: 'poNo', label: 'No. PO', type: 'text', width: 140 },
       { key: 'orderedAt', label: 'Tanggal', type: 'datetime', width: 170 },
-      { key: 'supplier', label: 'Supplier', type: 'text', width: 150 },
+      {
+        key: 'supplier',
+        label: 'Supplier',
+        type: 'select',
+        width: 180,
+        options: suppliers?.map((s) => s.storeName) ?? [],
+      },
       { 
         key: 'materialId', 
         label: 'Bahan', 
@@ -96,7 +110,7 @@ export default function PurchaseOrdersPage() {
       { key: 'expectedAt', label: 'Target Terima', type: 'date', width: 130 },
       { key: 'note', label: 'Catatan', type: 'text', width: 200 },
     ];
-  }, [materials]);
+  }, [materials, suppliers]);
 
   const supplierCounts = useMemo(() => {
     if (!data) return new Map<string, number>();

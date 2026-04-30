@@ -16,6 +16,8 @@ export const ALL_PERMISSIONS = [
   { code: 'products:write',  label: 'Edit / Hapus Inventory' },
   { code: 'materials:view',  label: 'Lihat Master Bahan Baku' },
   { code: 'materials:write', label: 'Edit / Hapus Master Bahan Baku' },
+  { code: 'suppliers:view',  label: 'Lihat Supplier' },
+  { code: 'suppliers:write', label: 'Edit / Hapus Supplier' },
   { code: 'production:view', label: 'Lihat Kalender Produksi' },
   { code: 'production:write',label: 'Edit / Hapus Kalender Produksi' },
   { code: 'hpp:view',        label: 'Akses Kalkulator HPP' },

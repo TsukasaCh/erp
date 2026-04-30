@@ -86,6 +86,20 @@ model Order {
   @@index([productId])
 }
 
+// Master data supplier / toko bahan baku
+model Supplier {
+  id        String   @id @default(uuid())
+  storeName String   @unique
+  picName   String?
+  phone     String?
+  address   String?
+  note      String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@index([storeName])
+}
+
 // Master data bahan baku (aluminium, kaca, handle, dst.)
 model Material {
   id             String   @id @default(uuid())

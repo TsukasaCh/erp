@@ -48,7 +48,8 @@ const NAV: NavItem[] = [
     icon: IconBox,
     children: [
       { kind: 'link', href: '/materials', label: 'Master Data Bahan', permission: 'materials:view' },
-      { kind: 'link', href: '/material-usage', label: 'Penggunaan Bahan', permission: 'materials:view' },
+      { kind: 'link', href: '/suppliers', label: 'Supplier', permission: 'suppliers:view' },
+      { kind: 'link', href: '/material-usage', label: 'Inventory', permission: 'materials:view' },
     ],
   },
   {
