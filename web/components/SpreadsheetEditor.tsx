@@ -400,7 +400,18 @@ function Cell<Row extends SpreadsheetRow>({
   onCancel: () => void;
 }) {
   const raw = (row as Record<string, unknown>)[column.key];
-  const display = column.format ? column.format(raw, row) : formatDefault(raw, column.type);
+  let display: string;
+  if (column.format) {
+    display = column.format(raw, row);
+  } else if (column.type === 'select' && column.options && raw != null && raw !== '') {
+    // Map stored value -> option label so UUID-like values render as their label
+    const match = column.options
+      .map(normalizeOption)
+      .find((o) => o.value === String(raw));
+    display = match ? match.label : formatDefault(raw, column.type);
+  } else {
+    display = formatDefault(raw, column.type);
+  }
   const align = column.align ?? (column.type === 'number' ? 'right' : 'left');
 
   if (!editing) {
