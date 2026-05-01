@@ -70,7 +70,22 @@ export default function OrdersPage() {
     fetcher,
   );
 
-  const { data: materials } = useSWR<any[]>('/api/materials', fetcher);
+  // SUMBER PRODUK = /api/products (barang jadi yang dijual). Sebelumnya keliru
+  // pakai /api/materials sehingga dropdown SKU & Produk berasal dari bahan baku
+  // dan tidak pernah ter-link.
+  const { data: products } = useSWR<Product[]>('/api/products', fetcher);
+
+  // Index untuk lookup cepat saat onChange / format
+  const productBySku = useMemo(() => {
+    const m = new Map<string, Product>();
+    products?.forEach((p) => m.set(p.sku, p));
+    return m;
+  }, [products]);
+  const productByName = useMemo(() => {
+    const m = new Map<string, Product>();
+    products?.forEach((p) => m.set(p.name, p));
+    return m;
+  }, [products]);
 
   const columns: ColumnDef<Order>[] = useMemo(() => [
     { key: 'orderNo', label: 'No. Order', type: 'text', width: 140 },
@@ -80,36 +95,62 @@ export default function OrdersPage() {
       options: PLATFORMS,
     },
     { key: 'buyer', label: 'Pembeli', type: 'text', width: 160 },
-    { 
-      key: 'sku', 
-      label: 'SKU', 
-      type: 'select', 
-      width: 130,
-      options: materials?.map(m => ({ value: m.code, label: m.code })) ?? [],
+    {
+      // Pilih dari SKU — auto-sync productId, productName, price
+      key: 'sku',
+      label: 'SKU',
+      type: 'select',
+      width: 200,
+      options: products?.map((p) => ({ value: p.sku, label: `${p.sku} — ${p.name}` })) ?? [],
+      // Display saat tidak edit: cukup SKU saja (tanpa nama, supaya kolom ringkas)
+      format: (v) => (v == null || v === '' ? '' : String(v)),
+      onChange: (newSku, row) => {
+        const p = productBySku.get(String(newSku ?? ''));
+        if (!p) return;
+        // Pilih produk BARU (berbeda dari sebelumnya) → reset price ke harga katalog.
+        // Pilih produk SAMA (re-pick) → pertahankan harga manual yg mungkin sudah diedit.
+        const isNewProduct = row.productId !== p.id;
+        return {
+          productId: p.id,
+          productName: p.name,
+          price: isNewProduct ? p.price : row.price,
+        } as Partial<Order>;
+      },
     },
-    { 
-      key: 'productName', 
-      label: 'Produk (dari Bahan)', 
-      type: 'select', 
-      width: 250,
-      options: materials?.map(m => ({ value: m.name, label: m.name })) ?? [],
+    {
+      // Pilih dari Nama Produk — auto-sync productId, sku, price
+      key: 'productName',
+      label: 'Produk',
+      type: 'select',
+      width: 280,
+      options: products?.map((p) => ({ value: p.name, label: p.name })) ?? [],
+      onChange: (newName, row) => {
+        const p = productByName.get(String(newName ?? ''));
+        if (!p) return;
+        const isNewProduct = row.productId !== p.id;
+        return {
+          productId: p.id,
+          sku: p.sku,
+          price: isNewProduct ? p.price : row.price,
+        } as Partial<Order>;
+      },
     },
     { key: 'quantity', label: 'Qty', type: 'number', width: 70, align: 'right' },
     {
-      key: 'price', label: 'Harga', type: 'number', width: 120, align: 'right',
+      key: 'price', label: 'Harga', type: 'number', width: 130, align: 'right',
       format: (v) => formatRupiah(Number(v ?? 0)),
     },
     {
-      key: 'total', label: 'Total', type: 'readonly', width: 130, align: 'right',
+      key: 'total', label: 'Total', type: 'readonly', width: 140, align: 'right',
       format: (_v, row) => {
         const t = Number(row.quantity ?? 0) * Number(row.price ?? 0);
         return formatRupiah(t);
       },
       computed: (row) => Number(row.quantity ?? 0) * Number(row.price ?? 0),
     },
-    { key: 'status', label: 'Status', type: 'select', options: STATUSES, width: 120 },
+    { key: 'status', label: 'Status', type: 'select', options: STATUSES, width: 130 },
     { key: 'note', label: 'Catatan', type: 'text', width: 200 },
-  ], [materials]);
+  ], [products, productBySku, productByName]);
 
   // Platform counts
   const platformCounts = useMemo(() => {
@@ -189,6 +230,7 @@ export default function OrdersPage() {
               orderedAt: new Date().toISOString(),
               platform: null,
               buyer: '',
+              productId: null,
               sku: '',
               productName: '',
               quantity: 1,

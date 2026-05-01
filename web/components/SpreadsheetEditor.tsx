@@ -14,6 +14,13 @@ export interface ColumnDef<Row> {
   options?: SelectOption[];
   format?: (value: unknown, row: Row) => string;
   computed?: (row: Row) => unknown; // auto-fill value on edit
+  /**
+   * Cascading update hook — dipanggil setelah cell di kolom ini berubah
+   * (sebelum computed columns dijalankan). Return partial row untuk merge
+   * ke row state. Contoh: pilih SKU → auto-fill productName + price + productId.
+   * Kembalikan undefined / void untuk no-op.
+   */
+  onChange?: (newValue: unknown, row: Row) => Partial<Row> | void;
 }
 
 function normalizeOption(o: SelectOption): { label: string; value: string } {
@@ -177,7 +184,19 @@ export function SpreadsheetEditor<Row extends SpreadsheetRow>({
       setRows((prev) =>
         prev.map((r) => {
           if (r._localId !== localId) return r;
-          const updated = { ...r, [colKey]: value, _dirty: true } as Row;
+          let updated = { ...r, [colKey]: value, _dirty: true } as Row;
+
+          // Cascading update: jalankan onChange dari kolom yang baru saja diedit.
+          // Patch yang dikembalikan di-merge ke row, memungkinkan satu pilihan
+          // mengisi beberapa field sekaligus (mis. pilih SKU → isi productName + price).
+          const editedCol = columns.find((c) => c.key === colKey);
+          if (editedCol?.onChange) {
+            const patch = editedCol.onChange(value, updated);
+            if (patch && typeof patch === 'object') {
+              updated = { ...updated, ...patch } as Row;
+            }
+          }
+
           // run computed columns
           for (const c of columns) {
             if (c.computed) {

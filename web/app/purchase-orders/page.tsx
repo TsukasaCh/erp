@@ -77,6 +77,12 @@ export default function PurchaseOrdersPage() {
   const { data: materials } = useSWR<Material[]>('/api/materials', fetcher);
   const { data: suppliers } = useSWR<Supplier[]>('/api/suppliers', fetcher);
 
+  const materialById = useMemo(() => {
+    const m = new Map<string, Material>();
+    materials?.forEach((x) => m.set(x.id, x));
+    return m;
+  }, [materials]);
+
   const editorColumns: ColumnDef<PurchaseOrder>[] = useMemo(() => {
     return [
       { key: 'poNo', label: 'No. PO', type: 'text', width: 140 },
@@ -88,12 +94,30 @@ export default function PurchaseOrdersPage() {
         width: 180,
         options: suppliers?.map((s) => s.storeName) ?? [],
       },
-      { 
-        key: 'materialId', 
-        label: 'Bahan', 
-        type: 'select', 
+      {
+        key: 'materialId',
+        label: 'Bahan',
+        type: 'select',
         width: 250,
-        options: materials?.map(m => ({ value: m.id, label: `${m.code} - ${m.name}` })) ?? [],
+        options: materials?.map((m) => ({ value: m.id, label: `${m.code} - ${m.name}` })) ?? [],
+        // Saat user pilih material → langsung sync materialCode, materialName,
+        // unit, supplier (default), dan price untuk feedback visual instan.
+        // Backend tetap re-validate & autofill di /api/purchase-orders/batch
+        // (jadi server tetap source of truth).
+        onChange: (newId, row) => {
+          const m = materialById.get(String(newId ?? ''));
+          if (!m) return;
+          const isNewMaterial = row.materialId !== m.id;
+          return {
+            materialCode: m.code,
+            materialName: m.name,
+            unit: m.unit,
+            // Default supplier dari Master Bahan kalau supplier belum diisi
+            supplier: row.supplier && row.supplier.length > 0 ? row.supplier : (m.supplier ?? null),
+            // Reset price hanya kalau ganti material baru
+            price: isNewMaterial ? m.price : row.price,
+          } as Partial<PurchaseOrder>;
+        },
       },
       { key: 'quantity', label: 'Qty', type: 'number', width: 80, align: 'right' },
       { key: 'unit', label: 'Satuan', type: 'select', options: UNITS, width: 100 },
@@ -110,7 +134,7 @@ export default function PurchaseOrdersPage() {
       { key: 'expectedAt', label: 'Target Terima', type: 'date', width: 130 },
       { key: 'note', label: 'Catatan', type: 'text', width: 200 },
     ];
-  }, [materials, suppliers]);
+  }, [materials, suppliers, materialById]);
 
   const supplierCounts = useMemo(() => {
     if (!data) return new Map<string, number>();
