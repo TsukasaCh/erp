@@ -34,16 +34,24 @@ materialsRouter.post('/batch', requirePermission('materials:write'), async (req,
 
   const saved = [];
   for (const m of upserts) {
-    const { id, ...data } = m;
+    // CRITICAL: strip `stock` from batch payload. Master Data Bahan = template-only.
+    // Stok diatur eksklusif via PO Pembelian (received), MaterialUsage, dan
+    // Penyesuaian (PATCH /:id/stock). Kalau tidak di-strip, frontend akan
+    // round-trip stale stock value dan overwrite stok aktual yang sudah
+    // diubah PO/Usage di tab lain (race condition).
+    const { id, stock: _ignoredStock, ...data } = m;
     if (id && id.length > 0) {
       try {
         const updated = await prisma.material.update({ where: { id }, data });
         saved.push(updated);
       } catch {
+        // Material baru (id stale): biarkan stok default 0 dari schema.
         const created = await prisma.material.create({ data });
         saved.push(created);
       }
     } else {
+      // Upsert by code: untuk material baru stock=0 (schema default).
+      // Untuk material existing, jangan touch stock — pakai update payload yg sudah strip.
       const created = await prisma.material.upsert({
         where: { code: data.code },
         update: data,

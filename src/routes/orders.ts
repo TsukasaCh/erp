@@ -115,36 +115,52 @@ ordersRouter.post('/batch', requirePermission('orders:write'), async (req, res) 
         }
 
         saved.push(updated);
-      } catch {
-        const created = await prisma.order.create({ data });
-        // Deduct stock for new order
+      } catch (err) {
+        // Fallback: id stale (record sudah ke-hapus) → create as new.
+        // Tetap validasi stok dengan ketat seperti CREATE path (no over-sell).
         if (data.productId && data.status !== 'cancelled') {
           const product = await prisma.product.findUnique({ where: { id: data.productId } });
-          if (product && product.stock >= (data.quantity ?? 0)) {
-            await prisma.product.update({
-              where: { id: data.productId },
-              data: { stock: { decrement: data.quantity ?? 0 } },
-            });
-          } else if (product) {
-            errors.push(`Stok ${product.name} tidak cukup (sisa: ${product.stock})`);
+          if (!product) {
+            errors.push(`Produk tidak ditemukan untuk order ${data.orderNo ?? '(baru)'}`);
+            continue;
           }
+          const qty = data.quantity ?? 0;
+          if (product.stock < qty) {
+            errors.push(
+              `Stok ${product.name} tidak cukup (sisa: ${product.stock}, dibutuhkan: ${qty}). Order tidak dibuat.`,
+            );
+            continue;
+          }
+          await prisma.product.update({
+            where: { id: data.productId },
+            data: { stock: { decrement: qty } },
+          });
         }
+        const created = await prisma.order.create({ data });
         saved.push(created);
       }
     } else {
-      // CREATE: validate stock and deduct
+      // CREATE: validate stock first; reject row entirely kalau tidak cukup.
+      // BUG #3 fix: sebelumnya kode push error tapi tetap create order qty
+      // penuh + zero out stock → over-sell. Sekarang kalau stok kurang,
+      // skip row (tidak create order, tidak touch stock).
       if (data.productId && data.status !== 'cancelled') {
         const product = await prisma.product.findUnique({ where: { id: data.productId } });
-        if (product && product.stock < (data.quantity ?? 0)) {
-          errors.push(`Stok ${product.name} tidak cukup (sisa: ${product.stock}, dibutuhkan: ${data.quantity})`);
-          // Still create the order but warn
+        if (!product) {
+          errors.push(`Produk tidak ditemukan untuk order ${data.orderNo ?? '(baru)'}`);
+          continue;
         }
-        if (product) {
-          await prisma.product.update({
-            where: { id: data.productId },
-            data: { stock: { decrement: Math.min(data.quantity ?? 0, product.stock) } },
-          });
+        const qty = data.quantity ?? 0;
+        if (product.stock < qty) {
+          errors.push(
+            `Stok ${product.name} tidak cukup (sisa: ${product.stock}, dibutuhkan: ${qty}). Order tidak dibuat.`,
+          );
+          continue;
         }
+        await prisma.product.update({
+          where: { id: data.productId },
+          data: { stock: { decrement: qty } },
+        });
       }
       const created = await prisma.order.create({ data });
       saved.push(created);

@@ -91,31 +91,58 @@ purchasesRouter.post('/batch', requirePermission('purchases:write'), async (req,
         const existing = await prisma.purchaseOrder.findUnique({ where: { id } });
         const updated = await prisma.purchaseOrder.update({ where: { id }, data });
 
-        // Handle stock adjustment when status changes to/from received
-        if (data.materialId && existing) {
+        // Handle stock adjustment when status changes to/from received,
+        // OR when quantity / materialId changes on an already-received PO.
+        if (existing) {
           const wasReceived = existing.status === 'received' && existing.stockAdjusted;
           const isReceived = data.status === 'received';
+          const newQty = Number(data.quantity ?? 0);
+          const oldQty = Number(existing.quantity);
+          const oldMaterialId = existing.materialId;
+          const newMaterialId = data.materialId ?? oldMaterialId;
 
-          if (!wasReceived && isReceived) {
-            // Newly received: add stock
+          if (!wasReceived && isReceived && newMaterialId) {
+            // Transition: pending/cancelled → received. Tambah stok material baru.
             await prisma.material.update({
-              where: { id: data.materialId },
-              data: { stock: { increment: data.quantity ?? 0 } },
+              where: { id: newMaterialId },
+              data: { stock: { increment: newQty } },
             });
             await prisma.purchaseOrder.update({
               where: { id },
               data: { stockAdjusted: true },
             });
-          } else if (wasReceived && !isReceived) {
-            // Reverted from received: remove stock
+          } else if (wasReceived && !isReceived && oldMaterialId) {
+            // Transition: received → pending/cancelled. Tarik balik stok lama.
             await prisma.material.update({
-              where: { id: data.materialId },
-              data: { stock: { decrement: existing.quantity } },
+              where: { id: oldMaterialId },
+              data: { stock: { decrement: oldQty } },
             });
             await prisma.purchaseOrder.update({
               where: { id },
               data: { stockAdjusted: false },
             });
+          } else if (wasReceived && isReceived) {
+            // BUG #2 fix: PO sudah received, ada koreksi qty / ganti material.
+            // Tarik balik stok lama dari material lama, lalu tambah stok baru
+            // ke material baru. Ini menangani:
+            // - qty diubah (10 → 12)         → stok material += diff
+            // - material diganti (A → B)     → stok A -= oldQty, stok B += newQty
+            const qtyChanged = oldQty !== newQty;
+            const materialChanged = oldMaterialId !== newMaterialId;
+            if (qtyChanged || materialChanged) {
+              if (oldMaterialId) {
+                await prisma.material.update({
+                  where: { id: oldMaterialId },
+                  data: { stock: { decrement: oldQty } },
+                });
+              }
+              if (newMaterialId) {
+                await prisma.material.update({
+                  where: { id: newMaterialId },
+                  data: { stock: { increment: newQty } },
+                });
+              }
+            }
           }
         }
 
