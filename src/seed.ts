@@ -2,49 +2,84 @@ import { prisma } from './db/client';
 import { hashPassword } from './services/auth';
 
 // ---------------------------------------------------------------------------
-// FINISHED PRODUCTS — barang jadi yang dijual ke customer.
-// Contoh: Jendela siap pasang, Pintu siap pasang, Kusen jadi.
-// Ini yang muncul di Penjualan / Inventory Product.
+// ALUCURV — spesialis aluminium lengkung (curved aluminium) di Bekasi.
+// Channel: Shopee (shopee.co.id/alucurv), TikTok Shop, IG @alucurv.official.
+//
+// Niche utama: jendela & pintu & kusen aluminium yang dibengkokkan/curved
+// custom, dengan profil 3" atau 4", warna Hitam Doff / Silver / Putih,
+// dengan atau tanpa ornament. Harga berbasis riset publik (IG/Shopee/BigGo).
+// SKU & harga di bawah adalah representatif — sesuaikan dengan katalog
+// final melalui UI Inventory Product setelah deploy.
 // ---------------------------------------------------------------------------
-const PRODUCT_CATEGORIES = ['Jendela', 'Pintu', 'Kusen', 'Partisi', 'Aksesoris', 'Jasa'];
+const PRODUCT_CATEGORIES = [
+  'Jendela Lengkung',
+  'Pintu Lengkung',
+  'Kusen Lengkung',
+  'Aksesoris',
+  'Custom & Jasa',
+];
 
 const PRODUCTS = [
-  { sku: 'JDL-CSMT-120', name: 'Jendela Casement 120x80',     categoryName: 'Jendela',  stock: 12, price: 1850000 },
-  { sku: 'JDL-CSMT-150', name: 'Jendela Casement 150x100',    categoryName: 'Jendela',  stock: 8,  price: 2400000 },
-  { sku: 'JDL-SLID-150', name: 'Jendela Sliding 150x100',     categoryName: 'Jendela',  stock: 15, price: 2100000 },
-  { sku: 'PTU-SLID-2D',  name: 'Pintu Sliding 2 Daun 240cm',  categoryName: 'Pintu',    stock: 6,  price: 4800000 },
-  { sku: 'PTU-FLDG-4D',  name: 'Pintu Folding 4 Daun 320cm',  categoryName: 'Pintu',    stock: 4,  price: 7500000 },
-  { sku: 'PTU-SWNG-90',  name: 'Pintu Swing Aluminium 90cm',  categoryName: 'Pintu',    stock: 10, price: 2200000 },
-  { sku: 'KSN-ALU-6CM',  name: 'Kusen Aluminium Profil 6cm',  categoryName: 'Kusen',    stock: 20, price: 380000  },
-  { sku: 'KSN-LKNG-150', name: 'Kusen Lengkung 150cm',        categoryName: 'Kusen',    stock: 5,  price: 1400000 },
-  { sku: 'PRT-OFC-3M',   name: 'Partisi Kantor 3m',           categoryName: 'Partisi',  stock: 3,  price: 5200000 },
-  { sku: 'JASA-INSTAL',  name: 'Jasa Pemasangan / m²',        categoryName: 'Jasa',     stock: 9999, price: 75000 },
+  // === Jendela Lengkung ===
+  { sku: 'JDL-LK-3-60120-HD',   name: 'Jendela Lengkung 3" 60x120 Hitam Doff',           categoryName: 'Jendela Lengkung', stock: 8,  price: 1850000 },
+  { sku: 'JDL-LK-3-90180-HD-O', name: 'Jendela Lengkung 3" 90x180 Hitam Doff + Ornament', categoryName: 'Jendela Lengkung', stock: 6,  price: 2930000 },
+  { sku: 'JDL-LK-3-90180-SLV',  name: 'Jendela Lengkung 3" 90x180 Silver',                categoryName: 'Jendela Lengkung', stock: 5,  price: 2750000 },
+  { sku: 'JDL-LK-4-120200-HD',  name: 'Jendela Lengkung 4" 120x200 Hitam Doff',           categoryName: 'Jendela Lengkung', stock: 4,  price: 4250000 },
+  { sku: 'JDL-LK-4-150200-HDO', name: 'Jendela Lengkung 4" 150x200 Hitam Doff + Ornament',categoryName: 'Jendela Lengkung', stock: 3,  price: 5500000 },
+  { sku: 'JDL-SLD-4-180150',    name: 'Jendela Sliding Lengkung 4" 180x150',              categoryName: 'Jendela Lengkung', stock: 4,  price: 4800000 },
+
+  // === Pintu Lengkung ===
+  { sku: 'PTU-LK-3-90210-SGL',  name: 'Pintu Lengkung 3" 90x210 Single',                  categoryName: 'Pintu Lengkung',   stock: 5,  price: 4200000 },
+  { sku: 'PTU-LK-4-100220-HD',  name: 'Pintu Lengkung 4" 100x220 Single Hitam Doff',      categoryName: 'Pintu Lengkung',   stock: 4,  price: 5500000 },
+  { sku: 'PTU-LK-4-120220-DBL', name: 'Pintu Lengkung 4" 120x220 Double Hitam Doff',      categoryName: 'Pintu Lengkung',   stock: 3,  price: 7800000 },
+
+  // === Kusen Lengkung ===
+  { sku: 'KSN-LK-3-PM',         name: 'Kusen Lengkung Custom 3" (per meter)',             categoryName: 'Kusen Lengkung',   stock: 50, price: 450000  },
+  { sku: 'KSN-LK-4-PM',         name: 'Kusen Lengkung Custom 4" (per meter)',             categoryName: 'Kusen Lengkung',   stock: 40, price: 550000  },
+  { sku: 'KSN-LK-4-200HR',      name: 'Kusen Lengkung 4" 200cm Half-Round',               categoryName: 'Kusen Lengkung',   stock: 6,  price: 1400000 },
+
+  // === Aksesoris ===
+  { sku: 'ORN-BUNGA-SET',       name: 'Ornament Bunga Aluminium (set)',                   categoryName: 'Aksesoris',        stock: 20, price: 350000  },
+  { sku: 'HDL-PTU-LK',          name: 'Handle Pintu Lengkung Premium',                    categoryName: 'Aksesoris',        stock: 25, price: 180000  },
+
+  // === Custom & Jasa ===
+  { sku: 'BND-ALU-PM',          name: 'Jasa Bending Aluminium (per meter)',               categoryName: 'Custom & Jasa',    stock: 9999, price: 250000 },
+  { sku: 'JASA-PSG-M2',         name: 'Jasa Pemasangan / m²',                             categoryName: 'Custom & Jasa',    stock: 9999, price: 150000 },
 ];
 
 // ---------------------------------------------------------------------------
-// RAW MATERIALS — bahan baku untuk produksi.
-// Contoh: profil aluminium, kaca, handle, sekrup. Ini yang muncul di
-// Master Data Bahan / Inventory Bahan.
+// MATERIALS — bahan baku Alucurv.
+// Mereka pakai profil aluminium STRAIGHT yang dibending sendiri menjadi
+// kurva, plus kaca dan hardware.
 // ---------------------------------------------------------------------------
 const MATERIALS = [
-  { code: 'ALU-SLIDE-3M',  name: 'Profil Aluminium Sliding 3m',     category: 'Aluminium',   unit: 'batang', stock: 50,  price: 350000, supplier: 'Sumber Logam Jaya' },
-  { code: 'ALU-SLIDE-6M',  name: 'Profil Aluminium Sliding 6m',     category: 'Aluminium',   unit: 'batang', stock: 30,  price: 680000, supplier: 'Sumber Logam Jaya' },
-  { code: 'ALU-CSMT-6M',   name: 'Profil Aluminium Casement 6m',    category: 'Aluminium',   unit: 'batang', stock: 25,  price: 720000, supplier: 'Sumber Logam Jaya' },
-  { code: 'ALU-KSN-6M',    name: 'Profil Aluminium Kusen 6m',       category: 'Aluminium',   unit: 'batang', stock: 40,  price: 540000, supplier: 'Aluminium Mas Sentosa' },
-  { code: 'KCA-RBN-5MM',   name: 'Kaca Riben 5mm',                  category: 'Kaca',        unit: 'm²',     stock: 80,  price: 165000, supplier: 'Sentosa Kaca' },
-  { code: 'KCA-BNG-5MM',   name: 'Kaca Bening 5mm',                 category: 'Kaca',        unit: 'm²',     stock: 100, price: 145000, supplier: 'Sentosa Kaca' },
-  { code: 'KCA-TMP-8MM',   name: 'Kaca Tempered 8mm',               category: 'Kaca',        unit: 'm²',     stock: 35,  price: 420000, supplier: 'Sentosa Kaca' },
-  { code: 'HDL-SLV-30',    name: 'Handle Pintu Silver 30cm',        category: 'Handle',      unit: 'pcs',    stock: 60,  price: 85000,  supplier: 'Mitra Hardware' },
-  { code: 'HDL-BLK-30',    name: 'Handle Pintu Black 30cm',         category: 'Handle',      unit: 'pcs',    stock: 45,  price: 95000,  supplier: 'Mitra Hardware' },
-  { code: 'ROL-4INC',      name: 'Roller Bearing 4 inch',           category: 'Roller',      unit: 'pcs',    stock: 6,   price: 45000,  supplier: 'Mitra Hardware' },
-  { code: 'ROL-6INC',      name: 'Roller Bearing 6 inch',           category: 'Roller',      unit: 'pcs',    stock: 25,  price: 65000,  supplier: 'Mitra Hardware' },
-  { code: 'ENG-PRM-4',     name: 'Engsel Premium 4 inch',           category: 'Engsel',      unit: 'pcs',    stock: 80,  price: 32000,  supplier: 'Mitra Hardware' },
-  { code: 'SLR-RBR-5M',    name: 'Karet Seal Hitam 5m',             category: 'Karet Seal',  unit: 'roll',   stock: 18,  price: 75000,  supplier: 'Mitra Hardware' },
-  { code: 'SCR-GLV-25',    name: 'Sekrup Galvanis 2.5cm',           category: 'Sekrup',      unit: 'box',    stock: 35,  price: 45000,  supplier: 'Mitra Hardware' },
+  // Profil aluminium straight (bahan utama untuk dibending)
+  { code: 'PRF-3-HD-6M',    name: 'Profil Aluminium 3" Hitam Doff 6m',  category: 'Aluminium',  unit: 'batang', stock: 60, price: 380000, supplier: 'Sumber Logam Jaya' },
+  { code: 'PRF-3-SLV-6M',   name: 'Profil Aluminium 3" Silver 6m',      category: 'Aluminium',  unit: 'batang', stock: 40, price: 340000, supplier: 'Sumber Logam Jaya' },
+  { code: 'PRF-3-PTH-6M',   name: 'Profil Aluminium 3" Putih 6m',       category: 'Aluminium',  unit: 'batang', stock: 25, price: 350000, supplier: 'Sumber Logam Jaya' },
+  { code: 'PRF-4-HD-6M',    name: 'Profil Aluminium 4" Hitam Doff 6m',  category: 'Aluminium',  unit: 'batang', stock: 35, price: 540000, supplier: 'Aluminium Mas Sentosa' },
+  { code: 'PRF-4-SLV-6M',   name: 'Profil Aluminium 4" Silver 6m',      category: 'Aluminium',  unit: 'batang', stock: 28, price: 490000, supplier: 'Aluminium Mas Sentosa' },
+
+  // Kaca (sering dipakai untuk jendela mati / lengkung)
+  { code: 'KCA-BNG-5MM',    name: 'Kaca Bening 5mm',                    category: 'Kaca',       unit: 'm²',     stock: 100, price: 145000, supplier: 'Sentosa Kaca' },
+  { code: 'KCA-RBN-5MM',    name: 'Kaca Riben 5mm',                     category: 'Kaca',       unit: 'm²',     stock: 80,  price: 165000, supplier: 'Sentosa Kaca' },
+  { code: 'KCA-TMP-8MM',    name: 'Kaca Tempered 8mm',                  category: 'Kaca',       unit: 'm²',     stock: 35,  price: 420000, supplier: 'Sentosa Kaca' },
+
+  // Hardware
+  { code: 'ENG-LK-PRM',     name: 'Engsel Pintu Lengkung Premium',      category: 'Engsel',     unit: 'pcs',    stock: 60,  price: 85000,  supplier: 'Mitra Hardware' },
+  { code: 'HDL-SLV-30',     name: 'Handle Pintu Silver 30cm',           category: 'Handle',     unit: 'pcs',    stock: 45,  price: 75000,  supplier: 'Mitra Hardware' },
+  { code: 'HDL-BLK-30',     name: 'Handle Pintu Black 30cm',            category: 'Handle',     unit: 'pcs',    stock: 35,  price: 85000,  supplier: 'Mitra Hardware' },
+  { code: 'KNC-PTU-DBL',    name: 'Kunci Pintu Double Bolt',            category: 'Aksesoris',  unit: 'pcs',    stock: 30,  price: 220000, supplier: 'Mitra Hardware' },
+  { code: 'ROL-JDL-4INC',   name: 'Roller Jendela Sliding 4 inch',      category: 'Roller',     unit: 'pcs',    stock: 80,  price: 45000,  supplier: 'Mitra Hardware' },
+  { code: 'SLR-RBR-5M',     name: 'Karet Seal Aluminium Hitam 5m',      category: 'Karet Seal', unit: 'roll',   stock: 25,  price: 75000,  supplier: 'Mitra Hardware' },
+  { code: 'SCR-GLV-25',     name: 'Sekrup Galvanis 2.5cm (box)',        category: 'Sekrup',     unit: 'box',    stock: 50,  price: 45000,  supplier: 'Mitra Hardware' },
+
+  // Ornament bahan
+  { code: 'ORN-ALU-PCS',    name: 'Ornament Aluminium (pcs)',           category: 'Aksesoris',  unit: 'pcs',    stock: 100, price: 28000,  supplier: 'Aluminium Mas Sentosa' },
 ];
 
 // ---------------------------------------------------------------------------
-// SUPPLIERS — toko/vendor sumber bahan baku.
+// SUPPLIERS — vendor bahan baku khas industri aluminium di Jabodetabek.
 // ---------------------------------------------------------------------------
 const SUPPLIERS = [
   { storeName: 'Sumber Logam Jaya',     picName: 'Pak Hendra', phone: '081234567890', address: 'Jl. Industri Raya No. 12, Tangerang' },
@@ -53,8 +88,8 @@ const SUPPLIERS = [
   { storeName: 'Mitra Hardware',        picName: 'Pak Aris',   phone: '081345678910', address: 'Pasar Pagi Mangga Dua Blok C-15' },
 ];
 
-const BUYERS = ['Pak Andi', 'Bu Dewi', 'Toko Jaya', 'CV Maju', 'Bu Sari', 'Pak Budi', 'Toko Sinar', 'Pak Joko'];
-const PLATFORMS = ['Shopee', 'TikTok', 'Tokopedia', 'Offline', 'WhatsApp'];
+const BUYERS = ['Pak Andi', 'Bu Dewi', 'Toko Jaya', 'CV Maju', 'Bu Sari', 'Pak Budi', 'Toko Sinar', 'Pak Joko', 'Bu Rina', 'Pak Heru'];
+const PLATFORMS = ['Shopee', 'TikTok', 'WhatsApp', 'Offline', 'Instagram'];
 const ORDER_STATUSES = ['to_ship', 'to_ship', 'shipped', 'completed', 'completed', 'cancelled'];
 
 // Default roles
@@ -218,15 +253,15 @@ async function seedProductsAndOrders() {
     });
     createdProducts.push(product);
   }
-  console.log(`  ${PRODUCTS.length} products (finished goods)`);
+  console.log(`  ${PRODUCTS.length} products (Alucurv catalog)`);
 
   // Create demo orders linked to finished products (last 14 days)
   let orderCount = 0;
   for (let dayOffset = 13; dayOffset >= 0; dayOffset--) {
-    const ordersPerDay = randInt(2, 8);
+    const ordersPerDay = randInt(2, 6);
     for (let i = 0; i < ordersPerDay; i++) {
       const product = rand(createdProducts);
-      const qty = randInt(1, 4);
+      const qty = randInt(1, 3);
       const platform = rand(PLATFORMS);
       const orderedAt = new Date(Date.now() - dayOffset * 86400000 - randInt(0, 86400) * 1000);
       orderCount++;

@@ -9,6 +9,8 @@
     "start": "node dist/index.js",
     "seed": "tsx src/seed.ts",
     "seed:prod": "node dist/seed.js",
+    "reseed:wipe": "tsx src/reseed-catalog.ts",
+    "reseed:wipe:prod": "node dist/reseed-catalog.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
