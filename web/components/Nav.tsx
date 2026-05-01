@@ -49,7 +49,16 @@ const NAV: NavItem[] = [
     children: [
       { kind: 'link', href: '/materials', label: 'Master Data Bahan', permission: 'materials:view' },
       { kind: 'link', href: '/suppliers', label: 'Supplier', permission: 'suppliers:view' },
-      { kind: 'link', href: '/material-usage', label: 'Inventory', permission: 'materials:view' },
+    ],
+  },
+  {
+    kind: 'group',
+    id: 'inventory',
+    label: 'Inventory',
+    icon: IconProducts,
+    children: [
+      { kind: 'link', href: '/products', label: 'Inventory Product', permission: 'products:view' },
+      { kind: 'link', href: '/material-usage', label: 'Inventory Bahan', permission: 'materials:view' },
     ],
   },
   {
