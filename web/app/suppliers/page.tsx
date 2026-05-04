@@ -3,6 +3,7 @@ import useSWR from 'swr';
 import { useMemo, useState } from 'react';
 import { fetcher, postJSON } from '@/lib/api';
 import { SpreadsheetEditor, type ColumnDef, type SpreadsheetRow } from '@/components/SpreadsheetEditor';
+import { matchText } from '@/lib/search';
 
 interface Supplier extends SpreadsheetRow {
   id?: string;
@@ -34,11 +35,8 @@ export default function SuppliersPage() {
   const filtered = useMemo(() => {
     if (!data) return [];
     if (!search) return data;
-    const s = search.toLowerCase();
     return data.filter((x) =>
-      x.storeName.toLowerCase().includes(s) ||
-      (x.picName ?? '').toLowerCase().includes(s) ||
-      (x.phone ?? '').toLowerCase().includes(s),
+      matchText(x, search, ['storeName', 'picName', 'phone', 'address', 'note']),
     );
   }, [data, search]);
 
@@ -92,7 +90,7 @@ export default function SuppliersPage() {
         </div>
         <div className="flex items-center gap-2">
           <input
-            placeholder="Cari toko / PIC / nomor…"
+            placeholder="Cari: toko / PIC / nomor / alamat / catatan…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="border rounded px-3 py-1.5 bg-white text-sm w-64"

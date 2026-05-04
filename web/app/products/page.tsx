@@ -3,6 +3,7 @@ import useSWR from 'swr';
 import { useMemo, useState } from 'react';
 import { fetcher, formatRupiah, postJSON } from '@/lib/api';
 import { SearchSelect, type SearchSelectOption } from '@/components/SearchSelect';
+import { matchText } from '@/lib/search';
 
 interface ProductCategory {
   id: string;
@@ -51,8 +52,11 @@ export default function ProductsPage() {
       if (!p.category || p.category.id !== categoryFilter) return false;
     }
     if (search) {
-      const s = search.toLowerCase();
-      if (!p.name.toLowerCase().includes(s) && !p.sku.toLowerCase().includes(s)) return false;
+      return matchText(p, search, [
+        'sku', 'name', 'note',
+        (r) => (r as Product).category?.name,
+        'stock', 'price',
+      ]);
     }
     return true;
   });
@@ -128,7 +132,7 @@ export default function ProductsPage() {
         <h1 className="text-2xl font-bold">Inventory</h1>
         <div className="flex items-center gap-2">
           <input
-            placeholder="Cari SKU / nama…"
+            placeholder="Cari: SKU / nama / kategori / catatan / harga…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="border rounded px-3 py-1.5 bg-white text-sm w-56"

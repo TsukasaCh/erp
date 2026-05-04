@@ -3,6 +3,7 @@ import useSWR from 'swr';
 import { useState } from 'react';
 import { fetcher, formatRupiah, postJSON } from '@/lib/api';
 import { SpreadsheetEditor, type ColumnDef } from '@/components/SpreadsheetEditor';
+import { matchText } from '@/lib/search';
 
 interface Material {
   id?: string;
@@ -107,8 +108,7 @@ export default function MaterialsPage() {
   const filtered = data.filter((m) => {
     if (category !== 'all' && m.category !== category) return false;
     if (search) {
-      const s = search.toLowerCase();
-      if (!m.name.toLowerCase().includes(s) && !m.code.toLowerCase().includes(s)) return false;
+      return matchText(m, search, ['code', 'name', 'category', 'unit', 'supplier', 'note', 'price']);
     }
     return true;
   });
@@ -125,7 +125,7 @@ export default function MaterialsPage() {
         </div>
         <div className="flex items-center gap-2">
           <input
-            placeholder="Cari kode / nama…"
+            placeholder="Cari: kode / nama / kategori / supplier / harga…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="border rounded px-3 py-1.5 bg-white text-sm w-56"

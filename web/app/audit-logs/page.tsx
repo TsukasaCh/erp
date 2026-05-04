@@ -1,6 +1,9 @@
 'use client';
 import useSWR from 'swr';
+import { useMemo, useState } from 'react';
 import { fetcher } from '@/lib/api';
+import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { matchText, inDateRange } from '@/lib/search';
 
 interface AuditLog {
   id: string;
@@ -10,6 +13,7 @@ interface AuditLog {
   resource: string;
   details: string | null;
   createdAt: string;
+  [k: string]: unknown;
 }
 
 interface ListResponse {
@@ -19,20 +23,63 @@ interface ListResponse {
   items: AuditLog[];
 }
 
+const ACTIONS = ['all', 'POST', 'PUT', 'PATCH', 'DELETE'];
+
 export default function AuditLogsPage() {
-  const { data, error, isLoading } = useSWR<ListResponse>('/api/audit-logs?pageSize=100', fetcher);
+  const { data, error, isLoading } = useSWR<ListResponse>('/api/audit-logs?pageSize=500', fetcher);
+  const [search, setSearch] = useState('');
+  const [actionFilter, setActionFilter] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState<string | null>(null);
+  const [dateTo, setDateTo] = useState<string | null>(null);
+
+  const filtered = useMemo(() => {
+    if (!data) return [];
+    let rows = data.items;
+    if (actionFilter !== 'all') rows = rows.filter((l) => l.action === actionFilter);
+    rows = inDateRange(rows, 'createdAt', dateFrom, dateTo);
+    if (search) {
+      rows = rows.filter((l) =>
+        matchText(l, search, ['username', 'action', 'resource', 'details', 'createdAt']),
+      );
+    }
+    return rows;
+  }, [data, search, actionFilter, dateFrom, dateTo]);
 
   if (error) return <div className="text-red-600">Error: {String(error)}</div>;
   if (isLoading || !data) return <div className="text-slate-500">Loading…</div>;
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="text-2xl font-bold">Audit Log</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Catatan aktivitas sistem. Waktu ditampilkan dalam Waktu Indonesia Barat (WIB).
-        </p>
+      <header className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold">Audit Log</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Catatan aktivitas sistem. Waktu ditampilkan dalam Waktu Indonesia Barat (WIB).
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            placeholder="Cari: user / aksi / URL / detail / tanggal…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="border rounded px-3 py-1.5 bg-white text-sm w-80"
+          />
+          <select
+            value={actionFilter}
+            onChange={(e) => setActionFilter(e.target.value)}
+            className="border rounded px-3 py-1.5 bg-white text-sm"
+          >
+            {ACTIONS.map((a) => (
+              <option key={a} value={a}>{a === 'all' ? 'Semua aksi' : a}</option>
+            ))}
+          </select>
+          <DateRangeFilter from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); }} />
+        </div>
       </header>
+
+      <div className="text-xs text-slate-500">
+        Menampilkan {filtered.length} dari {data.items.length} catatan
+      </div>
 
       <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
         <table className="w-full text-sm">
@@ -46,14 +93,14 @@ export default function AuditLogsPage() {
             </tr>
           </thead>
           <tbody>
-            {data.items.length === 0 && (
+            {filtered.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
-                  Belum ada catatan aktivitas.
+                  {data.items.length === 0 ? 'Belum ada catatan aktivitas.' : 'Tidak ada catatan yang cocok.'}
                 </td>
               </tr>
             )}
-            {data.items.map((log) => {
+            {filtered.map((log) => {
               const d = new Date(log.createdAt);
               const timeWIB = d.toLocaleString('id-ID', {
                 timeZone: 'Asia/Jakarta',

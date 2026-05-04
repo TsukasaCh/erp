@@ -1,8 +1,9 @@
 'use client';
 import useSWR, { mutate as swrMutate } from 'swr';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { fetcher, postJSON, patchJSON, deleteRequest, formatRupiah } from '@/lib/api';
 import { hasPermission } from '@/lib/auth';
+import { matchText } from '@/lib/search';
 
 interface Employee {
   id: string;
@@ -50,7 +51,27 @@ export default function PenggajianPage() {
 
   const [editing, setEditing] = useState<Payroll | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const canWrite = hasPermission('hrd:write');
+
+  const filtered = useMemo(() => {
+    if (!list) return [];
+    let rows = list;
+    if (statusFilter !== 'all') rows = rows.filter((p) => p.status === statusFilter);
+    if (search) {
+      rows = rows.filter((p) =>
+        matchText<Record<string, unknown>>(p as unknown as Record<string, unknown>, search, [
+          (r) => (r as unknown as Payroll).employee?.fullName,
+          (r) => (r as unknown as Payroll).employee?.nik,
+          (r) => (r as unknown as Payroll).employee?.department,
+          'status', 'note',
+          'baseSalary', 'allowance', 'overtimePay', 'deduction', 'netSalary',
+        ]),
+      );
+    }
+    return rows;
+  }, [list, search, statusFilter]);
 
   if (error) return <div className="text-red-600">Error: {String(error)}</div>;
 
@@ -163,11 +184,26 @@ export default function PenggajianPage() {
         <StatCard label="Belum Diproses" value={stats?.pendingCount ?? 0} color="text-amber-600" />
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs text-slate-500">Periode:</span>
         <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)}
           className="border rounded px-2 py-1 text-sm bg-white" />
-        <span className="text-xs text-slate-500 ml-auto">{list?.length ?? 0} record</span>
+        <input
+          placeholder="Cari: nama / NIK / dept / status…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="border rounded px-3 py-1.5 bg-white text-sm w-72 ml-2"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="border rounded px-2 py-1.5 text-sm bg-white"
+        >
+          <option value="all">Semua status</option>
+          <option value="draft">Draft</option>
+          <option value="paid">Paid</option>
+        </select>
+        <span className="text-xs text-slate-500 ml-auto">{filtered.length} dari {list?.length ?? 0} record</span>
       </div>
 
       <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
@@ -187,13 +223,15 @@ export default function PenggajianPage() {
           <tbody>
             {isLoading ? (
               <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400">Loading…</td></tr>
-            ) : !list || list.length === 0 ? (
+            ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
-                  Belum ada penggajian untuk periode ini. Klik &quot;+ Proses Gaji&quot; untuk generate dari karyawan aktif.
+                  {list && list.length > 0
+                    ? 'Tidak ada hasil yang cocok.'
+                    : 'Belum ada penggajian untuk periode ini. Klik "+ Proses Gaji" untuk generate dari karyawan aktif.'}
                 </td>
               </tr>
-            ) : list.map((p) => (
+            ) : filtered.map((p) => (
               <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50 group">
                 <td className="px-4 py-3">
                   <div className="font-medium">{p.employee.fullName}</div>

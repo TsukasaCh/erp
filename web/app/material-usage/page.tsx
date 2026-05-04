@@ -3,6 +3,8 @@ import useSWR from 'swr';
 import { useMemo, useState } from 'react';
 import { fetcher, formatRupiah, postJSON, deleteRequest, patchJSON } from '@/lib/api';
 import { SearchSelect, type SearchSelectOption } from '@/components/SearchSelect';
+import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { matchText, inDateRange } from '@/lib/search';
 
 interface Material {
   id: string;
@@ -38,6 +40,9 @@ type Tab = 'stock' | 'usage';
 export default function InventoryPage() {
   const [tab, setTab] = useState<Tab>('stock');
   const [stockSearch, setStockSearch] = useState('');
+  const [usageSearch, setUsageSearch] = useState('');
+  const [usageFrom, setUsageFrom] = useState<string | null>(null);
+  const [usageTo, setUsageTo] = useState<string | null>(null);
 
   const [showUsageForm, setShowUsageForm] = useState(false);
   const [showAdjustForm, setShowAdjustForm] = useState<Material | null>(null);
@@ -77,13 +82,26 @@ export default function InventoryPage() {
   const filteredMaterials = useMemo(() => {
     if (!materials) return [];
     if (!stockSearch) return materials;
-    const s = stockSearch.toLowerCase();
     return materials.filter((m) =>
-      m.code.toLowerCase().includes(s) ||
-      m.name.toLowerCase().includes(s) ||
-      (m.category ?? '').toLowerCase().includes(s),
+      matchText(m, stockSearch, ['code', 'name', 'category', 'unit', 'supplier', 'stock', 'price']),
     );
   }, [materials, stockSearch]);
+
+  const filteredUsages = useMemo(() => {
+    if (!usages) return [];
+    let rows = usages.items;
+    rows = inDateRange(rows, 'usageDate', usageFrom, usageTo);
+    if (usageSearch) {
+      rows = rows.filter((u) =>
+        matchText(u, usageSearch, [
+          'purpose', 'note', 'quantity', 'usageDate',
+          (r) => (r as MaterialUsage).material?.name,
+          (r) => (r as MaterialUsage).material?.code,
+        ]),
+      );
+    }
+    return rows;
+  }, [usages, usageSearch, usageFrom, usageTo]);
 
   // Aggregate stats
   const totalValue = useMemo(() => {
@@ -196,7 +214,7 @@ export default function InventoryPage() {
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <input
-              placeholder="Cari kode / nama / kategori…"
+              placeholder="Cari: kode / nama / kategori / supplier / stok…"
               value={stockSearch}
               onChange={(e) => setStockSearch(e.target.value)}
               className="border rounded px-3 py-1.5 bg-white text-sm w-72"
@@ -272,8 +290,21 @@ export default function InventoryPage() {
 
       {/* === TAB: RIWAYAT PENGELUARAN === */}
       {tab === 'usage' && (
-        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              placeholder="Cari: bahan / keperluan / catatan / tanggal…"
+              value={usageSearch}
+              onChange={(e) => setUsageSearch(e.target.value)}
+              className="border rounded px-3 py-1.5 bg-white text-sm w-80"
+            />
+            <DateRangeFilter from={usageFrom} to={usageTo} onChange={(f, t) => { setUsageFrom(f); setUsageTo(t); }} />
+            <span className="text-xs text-slate-500 ml-2">
+              {filteredUsages.length} dari {usages?.total ?? 0} catatan
+            </span>
+          </div>
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left">
               <tr>
                 <th className="px-4 py-3 font-medium">Tanggal</th>
@@ -289,12 +320,12 @@ export default function InventoryPage() {
               {loadingUsages && (
                 <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-400">Loading…</td></tr>
               )}
-              {!loadingUsages && (!usages || usages.items.length === 0) && (
+              {!loadingUsages && filteredUsages.length === 0 && (
                 <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-400">
-                  Belum ada catatan pengeluaran bahan.
+                  {usages && usages.items.length > 0 ? 'Tidak ada hasil yang cocok.' : 'Belum ada catatan pengeluaran bahan.'}
                 </td></tr>
               )}
-              {usages?.items.map((u) => (
+              {filteredUsages.map((u) => (
                 <tr key={u.id} className="border-t border-slate-100 hover:bg-slate-50 group">
                   <td className="px-4 py-3 text-xs text-slate-600">
                     {new Date(u.usageDate).toLocaleDateString('id-ID')}
@@ -325,6 +356,7 @@ export default function InventoryPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

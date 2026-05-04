@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import { fetcher, formatRupiah, postJSON } from '@/lib/api';
 import { platformColor, platformBadgeClass } from '@/lib/colors';
 import { SpreadsheetEditor, type ColumnDef, type SpreadsheetRow } from '@/components/SpreadsheetEditor';
+import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { matchText, inDateRange } from '@/lib/search';
 
 interface Product {
   id: string;
@@ -63,6 +65,8 @@ export default function OrdersPage() {
   const [status, setStatus] = useState<string>('to_ship');
   const [platform, setPlatform] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState<string | null>(null);
+  const [dateTo, setDateTo] = useState<string | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'orderedAt', dir: 'desc' });
 
   const { data, error, isLoading, mutate } = useSWR<ListResponse>(
@@ -167,13 +171,15 @@ export default function OrdersPage() {
     if (!data) return [];
     let rows = data.items;
     if (platform !== 'all') rows = rows.filter((o) => (o.platform ?? '(none)') === platform);
+    // Date range filter (orderedAt)
+    rows = inDateRange(rows, 'orderedAt', dateFrom, dateTo);
+    // Multi-keyword text search across many fields including formatted date & total
     if (search) {
-      const s = search.toLowerCase();
       rows = rows.filter((o) =>
-        (o.orderNo ?? '').toLowerCase().includes(s) ||
-        (o.buyer ?? '').toLowerCase().includes(s) ||
-        (o.sku ?? '').toLowerCase().includes(s) ||
-        (o.productName ?? '').toLowerCase().includes(s),
+        matchText(o, search, [
+          'orderNo', 'buyer', 'sku', 'productName',
+          'platform', 'status', 'note', 'orderedAt', 'total', 'price', 'quantity',
+        ]),
       );
     }
     const sorted = [...rows].sort((a, b) => {
@@ -188,7 +194,7 @@ export default function OrdersPage() {
       return sort.dir === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  }, [data, platform, search, sort]);
+  }, [data, platform, search, dateFrom, dateTo, sort]);
 
   if (error) return <div className="text-red-600">Error: {String(error)}</div>;
   if (isLoading || !data) return <div className="text-slate-500">Loading…</div>;
@@ -252,15 +258,16 @@ export default function OrdersPage() {
   // --- LIST VIEW MODE ---
   return (
     <div className="space-y-5">
-      <header className="flex items-center justify-between">
+      <header className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-2xl font-bold">Orders</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input
-            placeholder="Cari order / pembeli / SKU…"
+            placeholder="Cari: invoice / pembeli / produk / SKU / tanggal / status…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="border rounded px-3 py-1.5 bg-white text-sm w-60"
+            className="border rounded px-3 py-1.5 bg-white text-sm w-80"
           />
+          <DateRangeFilter from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); }} />
           <button
             onClick={() => setMode({ kind: 'edit' })}
             className="px-3 py-1.5 border border-slate-300 rounded text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5"

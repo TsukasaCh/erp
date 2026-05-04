@@ -3,6 +3,7 @@ import useSWR from 'swr';
 import { useEffect, useMemo, useState } from 'react';
 import { deleteRequest, fetcher, patchJSON, postJSON } from '@/lib/api';
 import { getUser, hasPermission } from '@/lib/auth';
+import { matchText } from '@/lib/search';
 
 interface Role {
   id: string;
@@ -87,6 +88,21 @@ function UsersTab() {
   const { data: roles } = useSWR<Role[]>('/api/roles', fetcher);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
+  const [search, setSearch] = useState('');
+
+  const filteredUsers = useMemo(() => {
+    if (!users) return undefined;
+    if (!search) return users;
+    return users.filter((u) =>
+      matchText<Record<string, unknown>>(u as unknown as Record<string, unknown>, search, [
+        'username', 'fullName',
+        (r) => (r as unknown as User).role?.name,
+        (r) => ((r as unknown as User).isSuperAdmin ? 'super admin' : ''),
+        (r) => ((r as unknown as User).active ? 'aktif' : 'nonaktif'),
+        'lastLoginAt',
+      ]),
+    );
+  }, [users, search]);
 
   const me = getUser();
   const actorIsSuper = !!me?.isSuperAdmin;
@@ -100,7 +116,13 @@ function UsersTab() {
 
   return (
     <section className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <input
+          placeholder="Cari: username / nama / role / status…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="border border-slate-300 rounded px-3 py-1.5 bg-white text-sm w-80"
+        />
         <button
           onClick={() => setAdding(true)}
           className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded px-4 py-2"
@@ -122,13 +144,15 @@ function UsersTab() {
             </tr>
           </thead>
           <tbody>
-            {!users && (
+            {!filteredUsers && (
               <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-400">Memuat…</td></tr>
             )}
-            {users?.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-400">Belum ada user.</td></tr>
+            {filteredUsers?.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                {users && users.length > 0 ? 'Tidak ada user yang cocok.' : 'Belum ada user.'}
+              </td></tr>
             )}
-            {users?.map((u) => (
+            {filteredUsers?.map((u) => (
               <tr key={u.id} className="border-t border-slate-100">
                 <td className="px-4 py-3 font-medium">{u.username}</td>
                 <td className="px-4 py-3 text-slate-600">{u.fullName ?? '—'}</td>

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { fetcher, formatRupiah, postJSON } from '@/lib/api';
 import { hasPermission } from '@/lib/auth';
 import { SpreadsheetEditor, type ColumnDef } from '@/components/SpreadsheetEditor';
+import { matchText } from '@/lib/search';
 
 interface Employee {
   id?: string;
@@ -80,11 +81,11 @@ export default function DataKaryawanPage() {
     if (filterDept !== 'all') rows = rows.filter((e) => (e.department ?? '(none)') === filterDept);
     if (filterStatus !== 'all') rows = rows.filter((e) => e.status === filterStatus);
     if (search) {
-      const s = search.toLowerCase();
       rows = rows.filter((e) =>
-        e.nik.toLowerCase().includes(s) ||
-        e.fullName.toLowerCase().includes(s) ||
-        (e.position ?? '').toLowerCase().includes(s),
+        matchText(e, search, [
+          'nik', 'fullName', 'position', 'department', 'status',
+          'phone', 'email', 'note', 'joinedAt', 'baseSalary', 'allowance',
+        ]),
       );
     }
     return [...rows].sort((a, b) => {
@@ -164,7 +165,7 @@ export default function DataKaryawanPage() {
         <h1 className="text-2xl font-bold">Data Karyawan</h1>
         <div className="flex items-center gap-2">
           <input
-            placeholder="Cari NIK / nama / jabatan…"
+            placeholder="Cari: NIK / nama / jabatan / dept / HP / email / gaji…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="border rounded px-3 py-1.5 bg-white text-sm w-60"
