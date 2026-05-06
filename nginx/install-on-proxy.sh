@@ -4,8 +4,8 @@
 # Jalanin di SERVER REVERSE PROXY (172.16.0.102), bukan di backend ERP.
 #
 # Usage:
-#   bash install-on-proxy.sh                       # HTTP only, IP-based
-#   bash install-on-proxy.sh erp.alucurv.com       # HTTPS dgn domain (auto certbot)
+#   bash install-on-proxy.sh                              # HTTP only, IP-based
+#   bash install-on-proxy.sh alucurv.ngelinx.com          # HTTPS + auto certbot
 #
 set -euo pipefail
 
@@ -39,7 +39,7 @@ if [[ -n "$DOMAIN" ]]; then
 
   # Pasang HTTP config dulu (biar certbot bisa challenge)
   cp "$SCRIPT_DIR/alucurv-erp.conf" /etc/nginx/sites-available/alucurv-erp
-  sed -i "s|server_name 172.16.0.102 erp.alucurv.local _;|server_name $DOMAIN;|" /etc/nginx/sites-available/alucurv-erp
+  sed -i "s|server_name alucurv.ngelinx.com 172.16.0.102 _;|server_name $DOMAIN;|" /etc/nginx/sites-available/alucurv-erp
 
   ln -sf /etc/nginx/sites-available/alucurv-erp /etc/nginx/sites-enabled/
   rm -f /etc/nginx/sites-enabled/default
@@ -53,7 +53,7 @@ if [[ -n "$DOMAIN" ]]; then
 
   # Replace dgn HTTPS config kita (yg sudah include security headers)
   cp "$SCRIPT_DIR/alucurv-erp-https.conf" /etc/nginx/sites-available/alucurv-erp
-  sed -i "s|erp.alucurv.com|$DOMAIN|g" /etc/nginx/sites-available/alucurv-erp
+  sed -i "s|alucurv.ngelinx.com|$DOMAIN|g" /etc/nginx/sites-available/alucurv-erp
 
 else
   log "Mode HTTP-only (IP-based)"

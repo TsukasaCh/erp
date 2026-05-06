@@ -69,24 +69,27 @@ docker compose up -d web
 
 Selesai. Akses di browser: `http://172.16.0.102` → langsung ke login page Alucurv.
 
-## Setup HTTPS dengan domain
+## Setup HTTPS dengan domain (alucurv.ngelinx.com)
 
 Prerequisite:
-- Domain udah punya A-record ke IP reverse proxy (mis. `erp.alucurv.com` → IP publik server)
+- A-record `alucurv.ngelinx.com` → IP publik reverse proxy (cek: `dig alucurv.ngelinx.com`)
 - Port 80 & 443 reachable dari internet (firewall + NAT kalau di belakang router)
+- Email valid untuk Let's Encrypt notification
 
 ```bash
-# Di server reverse proxy
-sudo bash install-on-proxy.sh erp.alucurv.com
-# Akan prompt email Let's Encrypt, lalu auto-request cert
+# Di server reverse proxy 172.16.0.102
+sudo bash install-on-proxy.sh alucurv.ngelinx.com
+# Akan prompt email Let's Encrypt, lalu auto-request cert + setup HTTPS
 
-# Di backend ERP
+# Di backend ERP 172.16.0.62
+ssh user@172.16.0.62
+cd erp
 nano .env
-# Ubah: NEXT_PUBLIC_API_BASE=https://erp.alucurv.com
+# Ubah: NEXT_PUBLIC_API_BASE=https://alucurv.ngelinx.com
 docker compose build web && docker compose up -d web
 ```
 
-Akses: `https://erp.alucurv.com` ✓
+Akses: `https://alucurv.ngelinx.com` ✓ (HTTP otomatis di-redirect ke HTTPS)
 
 ## Setup manual (kalau gak mau pakai script)
 
@@ -138,7 +141,7 @@ docker compose build web && docker compose up -d web
 ```
 
 ### Certbot gagal (Let's Encrypt error)
-- Pastikan domain udah resolve ke IP reverse proxy (`dig erp.alucurv.com`)
+- Pastikan domain udah resolve ke IP reverse proxy (`dig alucurv.ngelinx.com`)
 - Port 80 reachable dari internet (Let's Encrypt verify lewat HTTP-01)
 - Cek log: `journalctl -u nginx | tail -50`
 
