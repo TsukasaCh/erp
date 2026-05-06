@@ -59,6 +59,7 @@ const NAV: NavItem[] = [
     children: [
       { kind: 'link', href: '/products', label: 'Inventory Product', permission: 'products:view' },
       { kind: 'link', href: '/material-usage', label: 'Inventory Bahan', permission: 'materials:view' },
+      { kind: 'link', href: '/categories', label: 'Kategori', permission: 'materials:view' },
     ],
   },
   {

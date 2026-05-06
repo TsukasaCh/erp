@@ -86,6 +86,15 @@ model Order {
   @@index([productId])
 }
 
+// Master kategori bahan baku (mis. Aluminium, Kaca, Handle, dst)
+model MaterialCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // Master data supplier / toko bahan baku
 model Supplier {
   id        String   @id @default(uuid())

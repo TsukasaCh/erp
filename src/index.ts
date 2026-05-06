@@ -15,6 +15,7 @@ import { employeesRouter } from './routes/employees';
 import { attendanceRouter } from './routes/attendance';
 import { payrollRouter } from './routes/payroll';
 import { productCategoriesRouter } from './routes/product-categories';
+import { materialCategoriesRouter } from './routes/material-categories';
 import { materialUsageRouter } from './routes/material-usage';
 import { requireAuth } from './middleware/auth';
 
@@ -59,6 +60,7 @@ app.use('/api/orders',             protectedMw, ordersRouter);
 app.use('/api/products',           protectedMw, productsRouter);
 app.use('/api/product-categories', protectedMw, productCategoriesRouter);
 app.use('/api/materials',          protectedMw, materialsRouter);
+app.use('/api/material-categories',protectedMw, materialCategoriesRouter);
 app.use('/api/material-usage',     protectedMw, materialUsageRouter);
 app.use('/api/suppliers',          protectedMw, suppliersRouter);
 app.use('/api/purchase-orders',    protectedMw, purchasesRouter);

@@ -28,7 +28,11 @@ interface Supplier {
   storeName: string;
 }
 
-const CATEGORIES = ['Aluminium', 'Kaca', 'Handle', 'Karet Seal', 'Sekrup', 'Engsel', 'Roller', 'Aksesoris', 'Lainnya'];
+interface MaterialCategory {
+  id: string;
+  name: string;
+}
+
 const UNITS = ['pcs', 'batang', 'kg', 'm', 'm²', 'lembar', 'roll', 'box', 'set'];
 
 type Mode =
@@ -41,6 +45,8 @@ export default function MaterialsPage() {
   const [category, setCategory] = useState<string>('all');
   const { data, error, isLoading, mutate } = useSWR<Material[]>('/api/materials', fetcher);
   const { data: suppliers } = useSWR<Supplier[]>('/api/suppliers', fetcher);
+  const { data: categoriesData } = useSWR<MaterialCategory[]>('/api/material-categories', fetcher);
+  const CATEGORIES = (categoriesData ?? []).map((c) => c.name);
 
   // Editor columns: NO stock here — stock dikelola di Inventory.
   // Master Data Bahan = template/katalog bahan baku (kode, nama, satuan, harga, supplier).
