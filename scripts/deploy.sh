@@ -40,16 +40,72 @@ if [[ -f .env ]]; then
 else
   log "Generate .env baru dengan secret random..."
 
-  # Coba auto-detect public IP, fallback ke prompt
-  DETECTED_IP=$(curl -s --max-time 3 https://api.ipify.org 2>/dev/null || true)
-  if [[ -n "$DETECTED_IP" ]]; then
-    echo ""
-    read -rp "Public IP/domain VM ini [$DETECTED_IP]: " VM_HOST
-    VM_HOST="${VM_HOST:-$DETECTED_IP}"
-  else
-    read -rp "Public IP/domain VM ini (mis. 192.168.1.10 atau erp.alucurv.com): " VM_HOST
-    [[ -z "$VM_HOST" ]] && err "Host wajib diisi."
+  # Detect SEMUA IP yang available:
+  # - Public IP (visible dari internet, lewat ipify)
+  # - Private/LAN IP (172.x, 192.168.x, 10.x — untuk akses internal)
+  # - localhost (kalau lo cuma test di server itu sendiri)
+  PUBLIC_IP=$(curl -s --max-time 3 https://api.ipify.org 2>/dev/null || true)
+
+  # Private IP: ambil semua IP non-loopback dari hostname -I (Linux only)
+  PRIVATE_IPS=""
+  if command -v hostname >/dev/null 2>&1; then
+    PRIVATE_IPS=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)' | head -3 | tr '\n' ' ' || true)
   fi
+
+  echo ""
+  echo "  Detected:"
+  [[ -n "$PUBLIC_IP" ]]   && echo "    Public IP  : $PUBLIC_IP"
+  [[ -n "$PRIVATE_IPS" ]] && echo "    Private IP : $PRIVATE_IPS"
+  echo "    Localhost  : localhost / 127.0.0.1"
+  echo ""
+  echo "  Pilih host yang user akses untuk buka aplikasi (frontend → API):"
+  echo "    [1] Public IP  (akses dari internet)"
+  echo "    [2] Private IP (akses LAN/VPN saja, mis. 172.16.0.62)"
+  echo "    [3] localhost  (cuma di server ini)"
+  echo "    [4] Custom (ketik manual — domain, dll)"
+  echo ""
+
+  DEFAULT_CHOICE="1"
+  [[ -z "$PUBLIC_IP" && -n "$PRIVATE_IPS" ]] && DEFAULT_CHOICE="2"
+
+  read -rp "Pilihan [$DEFAULT_CHOICE]: " CHOICE
+  CHOICE="${CHOICE:-$DEFAULT_CHOICE}"
+
+  case "$CHOICE" in
+    1)
+      [[ -z "$PUBLIC_IP" ]] && err "Public IP tidak terdeteksi. Pilih opsi lain atau cek koneksi internet."
+      VM_HOST="$PUBLIC_IP"
+      ;;
+    2)
+      if [[ -z "$PRIVATE_IPS" ]]; then
+        err "Private IP tidak terdeteksi. Cek dengan: hostname -I"
+      fi
+      # Kalau ada beberapa private IP, kasih sub-pilihan
+      PRIVATE_ARR=($PRIVATE_IPS)
+      if [[ ${#PRIVATE_ARR[@]} -eq 1 ]]; then
+        VM_HOST="${PRIVATE_ARR[0]}"
+      else
+        echo ""
+        for i in "${!PRIVATE_ARR[@]}"; do
+          echo "    [$((i+1))] ${PRIVATE_ARR[$i]}"
+        done
+        read -rp "Pilih private IP [1]: " PIDX
+        PIDX="${PIDX:-1}"
+        VM_HOST="${PRIVATE_ARR[$((PIDX-1))]}"
+      fi
+      ;;
+    3)
+      VM_HOST="localhost"
+      ;;
+    4)
+      read -rp "Ketik host (mis. erp.alucurv.com atau IP lain): " VM_HOST
+      [[ -z "$VM_HOST" ]] && err "Host wajib diisi."
+      ;;
+    *)
+      err "Pilihan tidak valid"
+      ;;
+  esac
+  ok "Host yang dipakai: ${VM_HOST}"
 
   PG_PASS=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-32)
   JWT=$(openssl rand -base64 48 | tr -d '/+=' | cut -c1-48)
